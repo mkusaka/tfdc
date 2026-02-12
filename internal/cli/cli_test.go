@@ -54,6 +54,25 @@ func TestExecute_UnknownProviderExportFlagReturnsExitCode1(t *testing.T) {
 	}
 }
 
+func TestExecute_ProviderExportExtraArgsReturnsExitCode1(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+
+	code := Execute([]string{
+		"provider", "export",
+		"--name", "aws",
+		"--version", "6.31.0",
+		"--out-dir", t.TempDir(),
+		"extra",
+	}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "unexpected positional arguments") {
+		t.Fatalf("unexpected stderr: %s", errOut.String())
+	}
+}
+
 func TestExecute_InvalidRegistryURLReturnsExitCode1(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer

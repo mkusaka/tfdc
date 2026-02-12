@@ -156,6 +156,9 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 	if err := fs.Parse(args); err != nil {
 		return nil, &provider.ValidationError{Message: err.Error()}
 	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return nil, &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
 
 	opts := provider.ExportOptions{
 		Namespace:    namespace,
