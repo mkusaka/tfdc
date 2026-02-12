@@ -152,3 +152,29 @@ func TestBuildOutputPath_AllowsBracesInVariableValues(t *testing.T) {
 		t.Fatalf("unexpected path\nwant: %s\ngot:  %s", want, got)
 	}
 }
+
+func TestBuildOutputPath_DoesNotExpandPlaceholderTokensInsideValues(t *testing.T) {
+	rootDir := t.TempDir()
+	outDir := filepath.Join(rootDir, "a{namespace}")
+	tpl := "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"
+	vars := map[string]string{
+		"out":       outDir,
+		"namespace": "hashicorp",
+		"provider":  "aws",
+		"version":   "6.31.0",
+		"category":  "guides",
+		"slug":      "tag-policy-compliance",
+		"ext":       "md",
+	}
+
+	want := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "guides", "tag-policy-compliance.md")
+	for i := 0; i < 128; i++ {
+		got, err := BuildOutputPath(tpl, vars, outDir)
+		if err != nil {
+			t.Fatalf("iteration %d: expected path to be valid, got error: %v", i, err)
+		}
+		if got != want {
+			t.Fatalf("iteration %d: unexpected path\nwant: %s\ngot:  %s", i, want, got)
+		}
+	}
+}

@@ -18,13 +18,9 @@ var (
 )
 
 func BuildOutputPath(template string, vars map[string]string, outDir string) (string, error) {
-	if err := validateTemplatePlaceholders(template, vars); err != nil {
+	result, err := renderPathTemplate(template, vars)
+	if err != nil {
 		return "", err
-	}
-
-	result := template
-	for key, value := range vars {
-		result = strings.ReplaceAll(result, "{"+key+"}", value)
 	}
 
 	cleaned := filepath.Clean(result)
@@ -47,14 +43,23 @@ func BuildOutputPath(template string, vars map[string]string, outDir string) (st
 	return pathAbs, nil
 }
 
-func validateTemplatePlaceholders(template string, vars map[string]string) error {
-	for _, token := range rePlaceholder.FindAllString(template, -1) {
+func renderPathTemplate(template string, vars map[string]string) (string, error) {
+	var b strings.Builder
+	cursor := 0
+
+	for _, loc := range rePlaceholder.FindAllStringIndex(template, -1) {
+		b.WriteString(template[cursor:loc[0]])
+		token := template[loc[0]:loc[1]]
 		key := token[1 : len(token)-1]
-		if _, ok := vars[key]; !ok {
-			return fmt.Errorf("unresolved placeholder in path template: %s", token)
+		value, ok := vars[key]
+		if !ok {
+			return "", fmt.Errorf("unresolved placeholder in path template: %s", token)
 		}
+		b.WriteString(value)
+		cursor = loc[1]
 	}
-	return nil
+	b.WriteString(template[cursor:])
+	return b.String(), nil
 }
 
 func isPathWithinDir(baseAbs, targetAbs string) bool {
