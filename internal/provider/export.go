@@ -1,0 +1,434 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }
+
+type NotFoundError struct {
+	Message string
+}
+
+func (e *NotFoundError) Error() string { return e.Message }
+
+type WriteError struct {
+	Path string
+	Err  error
+}
+
+func (e *WriteError) Error() string { return fmt.Sprintf("failed to write file %s: %v", e.Path, e.Err) }
+func (e *WriteError) Unwrap() error { return e.Err }
+
+type APIClient interface {
+	GetJSON(ctx context.Context, path string, dst any) error
+	Get(ctx context.Context, path string) ([]byte, error)
+}
+
+type ExportOptions struct {
+	Namespace    string
+	Name         string
+	Version      string
+	Format       string
+	OutDir       string
+	Categories   []string
+	PathTemplate string
+	Clean        bool
+}
+
+type ExportSummary struct {
+	Provider string `json:"provider"`
+	Version  string `json:"version"`
+	OutDir   string `json:"out_dir"`
+	Written  int    `json:"written"`
+	Manifest string `json:"manifest"`
+}
+
+type providerVersionsResponse struct {
+	Included []struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		Attributes struct {
+			Version string `json:"version"`
+		} `json:"attributes"`
+	} `json:"included"`
+}
+
+type providerDocsListResponse struct {
+	Data []struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		Attributes struct {
+			Category string `json:"category"`
+			Slug     string `json:"slug"`
+			Title    string `json:"title"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+type providerDocDetailResponse struct {
+	Data struct {
+		ID         string `json:"id"`
+		Type       string `json:"type"`
+		Attributes struct {
+			Category string `json:"category"`
+			Path     string `json:"path"`
+			Slug     string `json:"slug"`
+			Title    string `json:"title"`
+			Content  string `json:"content"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+type manifest struct {
+	Provider    string         `json:"provider"`
+	Namespace   string         `json:"namespace"`
+	Version     string         `json:"version"`
+	Format      string         `json:"format"`
+	GeneratedAt string         `json:"generated_at"`
+	Total       int            `json:"total"`
+	Docs        []manifestItem `json:"docs"`
+}
+
+type manifestItem struct {
+	DocID    string `json:"doc_id"`
+	Category string `json:"category"`
+	Slug     string `json:"slug"`
+	Title    string `json:"title"`
+	Path     string `json:"path"`
+}
+
+var defaultCategories = []string{
+	"resources",
+	"data-sources",
+	"functions",
+	"guides",
+	"overview",
+	"actions",
+	"list-resources",
+}
+
+func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*ExportSummary, error) {
+	if err := validateExportOptions(&opts); err != nil {
+		return nil, err
+	}
+
+	if opts.Clean {
+		providerRoot := filepath.Join(opts.OutDir, "terraform", sanitizeSegment(opts.Name), sanitizeSegment(opts.Version))
+		if err := os.RemoveAll(providerRoot); err != nil {
+			return nil, &WriteError{Path: providerRoot, Err: err}
+		}
+	}
+
+	providerVersionID, err := resolveProviderVersionID(ctx, client, opts.Namespace, opts.Name, opts.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	ext, err := extensionForFormat(opts.Format)
+	if err != nil {
+		return nil, &ValidationError{Message: err.Error()}
+	}
+
+	seen := make(map[string]struct{})
+	manifestDocs := make([]manifestItem, 0)
+	written := 0
+
+	for _, category := range opts.Categories {
+		for page := 1; ; page++ {
+			docs, err := listProviderDocs(ctx, client, providerVersionID, category, page)
+			if err != nil {
+				return nil, err
+			}
+			if len(docs) == 0 {
+				break
+			}
+
+			for _, doc := range docs {
+				if _, exists := seen[doc.ID]; exists {
+					continue
+				}
+				seen[doc.ID] = struct{}{}
+
+				detail, raw, err := getProviderDocDetail(ctx, client, doc.ID)
+				if err != nil {
+					return nil, err
+				}
+
+				slug := detail.Data.Attributes.Slug
+				if slug == "" {
+					slug = doc.Attributes.Slug
+				}
+				if slug == "" {
+					slug = detail.Data.ID
+				}
+
+				vars := map[string]string{
+					"out":       opts.OutDir,
+					"namespace": sanitizeSegment(opts.Namespace),
+					"provider":  sanitizeSegment(opts.Name),
+					"version":   sanitizeSegment(opts.Version),
+					"category":  sanitizeSegment(detail.Data.Attributes.Category),
+					"slug":      sanitizeSegment(slug),
+					"doc_id":    sanitizeSegment(detail.Data.ID),
+					"ext":       ext,
+				}
+				if vars["category"] == "unknown" {
+					vars["category"] = sanitizeSegment(category)
+				}
+
+				filePath, err := BuildOutputPath(opts.PathTemplate, vars, opts.OutDir)
+				if err != nil {
+					return nil, &ValidationError{Message: err.Error()}
+				}
+
+				content, err := renderContent(opts.Format, detail, raw)
+				if err != nil {
+					return nil, err
+				}
+
+				if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+					return nil, &WriteError{Path: filePath, Err: err}
+				}
+				if err := os.WriteFile(filePath, content, 0o644); err != nil {
+					return nil, &WriteError{Path: filePath, Err: err}
+				}
+
+				relPath, err := filepath.Rel(opts.OutDir, filePath)
+				if err != nil {
+					relPath = filePath
+				}
+
+				manifestDocs = append(manifestDocs, manifestItem{
+					DocID:    detail.Data.ID,
+					Category: detail.Data.Attributes.Category,
+					Slug:     slug,
+					Title:    detail.Data.Attributes.Title,
+					Path:     filepath.ToSlash(relPath),
+				})
+				written++
+			}
+		}
+	}
+
+	sort.Slice(manifestDocs, func(i, j int) bool {
+		return manifestDocs[i].Path < manifestDocs[j].Path
+	})
+
+	manifestPath, err := writeManifest(opts, manifestDocs)
+	if err != nil {
+		return nil, err
+	}
+
+	relManifestPath, err := filepath.Rel(opts.OutDir, manifestPath)
+	if err != nil {
+		relManifestPath = manifestPath
+	}
+
+	return &ExportSummary{
+		Provider: sanitizeSegment(opts.Name),
+		Version:  opts.Version,
+		OutDir:   opts.OutDir,
+		Written:  written,
+		Manifest: filepath.ToSlash(filepath.Join(opts.OutDir, relManifestPath)),
+	}, nil
+}
+
+func validateExportOptions(opts *ExportOptions) error {
+	opts.Namespace = strings.ToLower(strings.TrimSpace(opts.Namespace))
+	opts.Name = strings.ToLower(strings.TrimSpace(opts.Name))
+	opts.Version = strings.TrimSpace(opts.Version)
+	opts.Format = strings.ToLower(strings.TrimSpace(opts.Format))
+	opts.OutDir = strings.TrimSpace(opts.OutDir)
+	opts.PathTemplate = strings.TrimSpace(opts.PathTemplate)
+
+	if opts.Namespace == "" {
+		opts.Namespace = "hashicorp"
+	}
+	if opts.Name == "" {
+		return &ValidationError{Message: "--name is required"}
+	}
+	if opts.Version == "" {
+		return &ValidationError{Message: "--version is required"}
+	}
+	if opts.Format == "" {
+		opts.Format = "markdown"
+	}
+	if opts.OutDir == "" {
+		return &ValidationError{Message: "--out-dir is required"}
+	}
+	if opts.PathTemplate == "" {
+		opts.PathTemplate = DefaultPathTemplate
+	}
+
+	outAbs, err := filepath.Abs(opts.OutDir)
+	if err != nil {
+		return &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
+	}
+	opts.OutDir = outAbs
+
+	cats, err := normalizeCategories(opts.Categories)
+	if err != nil {
+		return err
+	}
+	opts.Categories = cats
+
+	if _, err := extensionForFormat(opts.Format); err != nil {
+		return &ValidationError{Message: err.Error()}
+	}
+	return nil
+}
+
+func normalizeCategories(input []string) ([]string, error) {
+	if len(input) == 0 {
+		return append([]string{}, defaultCategories...), nil
+	}
+
+	allowed := make(map[string]struct{}, len(defaultCategories))
+	for _, c := range defaultCategories {
+		allowed[c] = struct{}{}
+	}
+
+	set := make(map[string]struct{})
+	for _, raw := range input {
+		for _, token := range strings.Split(raw, ",") {
+			cat := strings.ToLower(strings.TrimSpace(token))
+			if cat == "" {
+				continue
+			}
+			if cat == "all" {
+				return append([]string{}, defaultCategories...), nil
+			}
+			if _, ok := allowed[cat]; !ok {
+				return nil, &ValidationError{Message: fmt.Sprintf("unsupported category: %s", cat)}
+			}
+			set[cat] = struct{}{}
+		}
+	}
+
+	if len(set) == 0 {
+		return append([]string{}, defaultCategories...), nil
+	}
+
+	result := make([]string, 0, len(set))
+	for cat := range set {
+		result = append(result, cat)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func resolveProviderVersionID(ctx context.Context, client APIClient, namespace, provider, version string) (string, error) {
+	path := fmt.Sprintf("/v2/providers/%s/%s?include=provider-versions", url.PathEscape(namespace), url.PathEscape(provider))
+	var resp providerVersionsResponse
+	if err := client.GetJSON(ctx, path, &resp); err != nil {
+		return "", err
+	}
+
+	for _, included := range resp.Included {
+		if included.Type == "provider-versions" && included.Attributes.Version == version {
+			return included.ID, nil
+		}
+	}
+
+	return "", &NotFoundError{Message: fmt.Sprintf("provider version not found: %s/%s@%s", namespace, provider, version)}
+}
+
+func listProviderDocs(ctx context.Context, client APIClient, providerVersionID, category string, page int) ([]struct {
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Attributes struct {
+		Category string `json:"category"`
+		Slug     string `json:"slug"`
+		Title    string `json:"title"`
+	} `json:"attributes"`
+}, error) {
+	q := url.Values{}
+	q.Set("filter[provider-version]", providerVersionID)
+	q.Set("filter[category]", category)
+	q.Set("filter[language]", "hcl")
+	q.Set("page[number]", fmt.Sprintf("%d", page))
+
+	path := "/v2/provider-docs?" + q.Encode()
+	var resp providerDocsListResponse
+	if err := client.GetJSON(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func getProviderDocDetail(ctx context.Context, client APIClient, docID string) (providerDocDetailResponse, []byte, error) {
+	var detail providerDocDetailResponse
+	path := fmt.Sprintf("/v2/provider-docs/%s", url.PathEscape(docID))
+	raw, err := client.Get(ctx, path)
+	if err != nil {
+		return detail, nil, err
+	}
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		return detail, nil, err
+	}
+	return detail, raw, nil
+}
+
+func renderContent(format string, detail providerDocDetailResponse, raw []byte) ([]byte, error) {
+	switch format {
+	case "markdown":
+		return []byte(detail.Data.Attributes.Content), nil
+	case "json":
+		var anyDoc any
+		if err := json.Unmarshal(raw, &anyDoc); err != nil {
+			if len(raw) == 0 {
+				return nil, &WriteError{Path: "", Err: errors.New("empty provider doc response")}
+			}
+			return raw, nil
+		}
+		formatted, err := json.MarshalIndent(anyDoc, "", "  ")
+		if err != nil {
+			return nil, &WriteError{Path: "", Err: err}
+		}
+		return append(formatted, '\n'), nil
+	default:
+		return nil, &ValidationError{Message: fmt.Sprintf("unsupported format: %s", format)}
+	}
+}
+
+func writeManifest(opts ExportOptions, docs []manifestItem) (string, error) {
+	docsRoot := filepath.Join(opts.OutDir, "terraform", sanitizeSegment(opts.Name), sanitizeSegment(opts.Version), "docs")
+	if err := os.MkdirAll(docsRoot, 0o755); err != nil {
+		return "", &WriteError{Path: docsRoot, Err: err}
+	}
+
+	m := manifest{
+		Provider:    sanitizeSegment(opts.Name),
+		Namespace:   sanitizeSegment(opts.Namespace),
+		Version:     opts.Version,
+		Format:      opts.Format,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		Total:       len(docs),
+		Docs:        docs,
+	}
+
+	b, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return "", &WriteError{Path: filepath.Join(docsRoot, "_manifest.json"), Err: err}
+	}
+
+	manifestPath := filepath.Join(docsRoot, "_manifest.json")
+	if err := os.WriteFile(manifestPath, append(b, '\n'), 0o644); err != nil {
+		return "", &WriteError{Path: manifestPath, Err: err}
+	}
+	return manifestPath, nil
+}
