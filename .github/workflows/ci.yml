@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - feat/**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install golangci-lint (binary)
+        run: |
+          set -euo pipefail
+          VERSION="1.64.8"
+          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          ARCH="$(uname -m)"
+          case "${ARCH}" in
+            x86_64) ARCH="amd64" ;;
+            aarch64|arm64) ARCH="arm64" ;;
+            *) echo "unsupported architecture: ${ARCH}" >&2; exit 1 ;;
+          esac
+          ARCHIVE="golangci-lint-${VERSION}-${OS}-${ARCH}.tar.gz"
+          URL="https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/${ARCHIVE}"
+          curl -sSfL "${URL}" -o "${RUNNER_TEMP}/${ARCHIVE}"
+          tar -xzf "${RUNNER_TEMP}/${ARCHIVE}" -C "${RUNNER_TEMP}"
+          install -m 0755 "${RUNNER_TEMP}/golangci-lint-${VERSION}-${OS}-${ARCH}/golangci-lint" "${RUNNER_TEMP}/golangci-lint"
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+
+      - name: Lint
+        run: |
+          golangci-lint version
+          golangci-lint run ./...
