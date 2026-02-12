@@ -142,7 +142,10 @@ func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
 		}
 
 		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		closeErr := resp.Body.Close()
+		if readErr == nil && closeErr != nil {
+			readErr = closeErr
+		}
 		if readErr != nil {
 			lastErr = readErr
 			if attempt < c.retry {

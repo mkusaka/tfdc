@@ -2,60 +2,45 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - feat/**
+    branches: [main]
   pull_request:
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  build-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -v ./cmd/terraform-docs-cli
 
       - name: Test
-        run: go test ./...
+        run: go test -v -race ./...
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Install golangci-lint (binary)
-        run: |
-          set -euo pipefail
-          VERSION="1.64.8"
-          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          ARCH="$(uname -m)"
-          case "${ARCH}" in
-            x86_64) ARCH="amd64" ;;
-            aarch64|arm64) ARCH="arm64" ;;
-            *) echo "unsupported architecture: ${ARCH}" >&2; exit 1 ;;
-          esac
-          ARCHIVE="golangci-lint-${VERSION}-${OS}-${ARCH}.tar.gz"
-          URL="https://github.com/golangci/golangci-lint/releases/download/v${VERSION}/${ARCHIVE}"
-          curl -sSfL "${URL}" -o "${RUNNER_TEMP}/${ARCHIVE}"
-          tar -xzf "${RUNNER_TEMP}/${ARCHIVE}" -C "${RUNNER_TEMP}"
-          install -m 0755 "${RUNNER_TEMP}/golangci-lint-${VERSION}-${OS}-${ARCH}/golangci-lint" "${RUNNER_TEMP}/golangci-lint"
-          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
-
-      - name: Lint
-        run: |
-          golangci-lint version
-          golangci-lint run ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: v2.9.0
+          install-mode: binary
+          args: ./...

@@ -34,7 +34,7 @@ type globalFlags struct {
 func Execute(args []string, stdout io.Writer, stderr io.Writer) int {
 	g, rest, err := parseGlobalFlags(args)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
 
@@ -54,20 +54,20 @@ func Execute(args []string, stdout io.Writer, stderr io.Writer) int {
 			summary, runErr := runProviderExport(ctx, g, subArgs)
 			if runErr != nil {
 				code := mapErrorToExitCode(runErr)
-				fmt.Fprintln(stderr, runErr)
+				_, _ = fmt.Fprintln(stderr, runErr)
 				return code
 			}
 			if err := writeSummary(g, summary, stdout); err != nil {
-				fmt.Fprintln(stderr, err)
+				_, _ = fmt.Fprintln(stderr, err)
 				return 4
 			}
 			return 0
 		default:
-			fmt.Fprintf(stderr, "unsupported provider command: %s\n", cmd)
+			_, _ = fmt.Fprintf(stderr, "unsupported provider command: %s\n", cmd)
 			return 1
 		}
 	default:
-		fmt.Fprintf(stderr, "unsupported command group: %s\n", group)
+		_, _ = fmt.Fprintf(stderr, "unsupported command group: %s\n", group)
 		printUsage(stderr)
 		return 1
 	}
@@ -245,7 +245,7 @@ func mapErrorToExitCode(err error) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: terraform-docs-cli [global flags] provider export [flags]")
+	_, _ = fmt.Fprintln(w, "usage: terraform-docs-cli [global flags] provider export [flags]")
 }
 
 func expandHomeDir(path string) (string, error) {
