@@ -127,3 +127,28 @@ func TestBuildOutputPath_RejectsOutDirAncestorSymlink(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestBuildOutputPath_AllowsBracesInVariableValues(t *testing.T) {
+	rootDir := t.TempDir()
+	outDir := filepath.Join(rootDir, "a{b}")
+	tpl := "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"
+	vars := map[string]string{
+		"out":       outDir,
+		"namespace": "hashicorp",
+		"provider":  "aws",
+		"version":   "6.31.0",
+		"category":  "guides",
+		"slug":      "tag-policy-compliance",
+		"ext":       "md",
+	}
+
+	got, err := BuildOutputPath(tpl, vars, outDir)
+	if err != nil {
+		t.Fatalf("expected path to be valid, got error: %v", err)
+	}
+
+	want := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "guides", "tag-policy-compliance.md")
+	if got != want {
+		t.Fatalf("unexpected path\nwant: %s\ngot:  %s", want, got)
+	}
+}

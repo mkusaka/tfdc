@@ -499,7 +499,6 @@ func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
 }
 
 func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
-	template := opts.PathTemplate
 	known := map[string]string{
 		"out":       opts.OutDir,
 		"namespace": sanitizeSegment(opts.Namespace),
@@ -507,19 +506,12 @@ func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
 		"version":   sanitizeSegment(opts.Version),
 		"ext":       ext,
 	}
-	for k, v := range known {
-		template = strings.ReplaceAll(template, "{"+k+"}", v)
-	}
 
-	loc := rePlaceholder.FindStringIndex(template)
-	var prefix string
-	if loc == nil {
-		prefix = filepath.Dir(template)
-	} else {
-		prefix = template[:loc[0]]
-		if !strings.HasSuffix(prefix, "/") && !strings.HasSuffix(prefix, string(os.PathSeparator)) {
-			prefix = filepath.Dir(prefix)
-		}
+	prefix, hasUnknown := substituteUntilUnknownPlaceholder(opts.PathTemplate, known)
+	if !hasUnknown {
+		prefix = filepath.Dir(prefix)
+	} else if !strings.HasSuffix(prefix, "/") && !strings.HasSuffix(prefix, string(os.PathSeparator)) {
+		prefix = filepath.Dir(prefix)
 	}
 	if strings.TrimSpace(prefix) == "" || prefix == "." {
 		prefix = opts.OutDir
@@ -538,6 +530,25 @@ func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
 		return "", &ValidationError{Message: "derived clean root is outside --out-dir"}
 	}
 	return rootAbs, nil
+}
+
+func substituteUntilUnknownPlaceholder(template string, known map[string]string) (string, bool) {
+	var b strings.Builder
+	cursor := 0
+
+	for _, loc := range rePlaceholder.FindAllStringIndex(template, -1) {
+		b.WriteString(template[cursor:loc[0]])
+		token := template[loc[0]:loc[1]]
+		key := token[1 : len(token)-1]
+		replacement, ok := known[key]
+		if !ok {
+			return b.String(), true
+		}
+		b.WriteString(replacement)
+		cursor = loc[1]
+	}
+	b.WriteString(template[cursor:])
+	return b.String(), false
 }
 
 func validatePathTemplate(opts ExportOptions, ext string) error {

@@ -275,6 +275,42 @@ func TestExportDocs_CleanDoesNotDeleteWhenVersionResolutionFails(t *testing.T) {
 	}
 }
 
+func TestExportDocs_CleanWithBracesInOutDir(t *testing.T) {
+	rootDir := t.TempDir()
+	outDir := filepath.Join(rootDir, "a{b}")
+
+	stalePath := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "old", "stale.md")
+	if err := os.MkdirAll(filepath.Dir(stalePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeAPIClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:  "hashicorp",
+		Name:       "aws",
+		Version:    "6.31.0",
+		Format:     "markdown",
+		OutDir:     outDir,
+		Categories: []string{"guides"},
+		Clean:      true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Fatalf("expected stale file to be removed by --clean")
+	}
+
+	guidePath := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "guides", "tag-policy-compliance.md")
+	if _, err := os.Stat(guidePath); err != nil {
+		t.Fatalf("expected guide file to be written: %v", err)
+	}
+}
+
 func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
 	outDir := t.TempDir()
 	staleCustom := filepath.Join(outDir, "custom", "guides", "stale.md")
