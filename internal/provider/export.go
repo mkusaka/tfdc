@@ -499,8 +499,13 @@ func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
 }
 
 func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
+	outAbs, err := filepath.Abs(opts.OutDir)
+	if err != nil {
+		return "", &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
+	}
+
 	known := map[string]string{
-		"out":       opts.OutDir,
+		"out":       outAbs,
 		"namespace": sanitizeSegment(opts.Namespace),
 		"provider":  sanitizeSegment(opts.Name),
 		"version":   sanitizeSegment(opts.Version),
@@ -514,18 +519,14 @@ func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
 		prefix = filepath.Dir(prefix)
 	}
 	if strings.TrimSpace(prefix) == "" || prefix == "." {
-		prefix = opts.OutDir
+		prefix = outAbs
 	}
 
-	rootAbs, err := filepath.Abs(filepath.Clean(prefix))
+	rootAbs, err := resolvePathWithinBase(prefix, outAbs)
 	if err != nil {
 		return "", &ValidationError{Message: fmt.Sprintf("failed to derive clean root from template: %v", err)}
 	}
 
-	outAbs, err := filepath.Abs(opts.OutDir)
-	if err != nil {
-		return "", &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
-	}
 	if !isPathWithinDir(outAbs, rootAbs) {
 		return "", &ValidationError{Message: "derived clean root is outside --out-dir"}
 	}

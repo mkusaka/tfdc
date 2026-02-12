@@ -178,3 +178,22 @@ func TestBuildOutputPath_DoesNotExpandPlaceholderTokensInsideValues(t *testing.T
 		}
 	}
 }
+
+func TestBuildOutputPath_RelativeTemplateIsAnchoredToOutDir(t *testing.T) {
+	outDir := t.TempDir()
+	tpl := "{slug}.{ext}"
+	vars := map[string]string{
+		"slug": "tag-policy-compliance",
+		"ext":  "md",
+	}
+
+	got, err := BuildOutputPath(tpl, vars, outDir)
+	if err != nil {
+		t.Fatalf("expected relative template to resolve under out-dir, got error: %v", err)
+	}
+
+	want := filepath.Join(outDir, "tag-policy-compliance.md")
+	if got != want {
+		t.Fatalf("unexpected path\nwant: %s\ngot:  %s", want, got)
+	}
+}

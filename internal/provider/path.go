@@ -23,12 +23,11 @@ func BuildOutputPath(template string, vars map[string]string, outDir string) (st
 		return "", err
 	}
 
-	cleaned := filepath.Clean(result)
 	outAbs, err := filepath.Abs(outDir)
 	if err != nil {
 		return "", err
 	}
-	pathAbs, err := filepath.Abs(cleaned)
+	pathAbs, err := resolvePathWithinBase(result, outAbs)
 	if err != nil {
 		return "", err
 	}
@@ -41,6 +40,14 @@ func BuildOutputPath(template string, vars map[string]string, outDir string) (st
 	}
 
 	return pathAbs, nil
+}
+
+func resolvePathWithinBase(path, baseAbs string) (string, error) {
+	cleaned := filepath.Clean(path)
+	if !filepath.IsAbs(cleaned) {
+		cleaned = filepath.Join(baseAbs, cleaned)
+	}
+	return filepath.Abs(cleaned)
 }
 
 func renderPathTemplate(template string, vars map[string]string) (string, error) {
