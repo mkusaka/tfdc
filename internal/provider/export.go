@@ -111,6 +111,12 @@ type manifestItem struct {
 	Path     string `json:"path"`
 }
 
+type plannedFile struct {
+	path    string
+	content []byte
+	item    manifestItem
+}
+
 var defaultCategories = []string{
 	"resources",
 	"data-sources",
@@ -126,13 +132,6 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 		return nil, err
 	}
 
-	if opts.Clean {
-		providerRoot := filepath.Join(opts.OutDir, "terraform", sanitizeSegment(opts.Name), sanitizeSegment(opts.Version))
-		if err := os.RemoveAll(providerRoot); err != nil {
-			return nil, &WriteError{Path: providerRoot, Err: err}
-		}
-	}
-
 	providerVersionID, err := resolveProviderVersionID(ctx, client, opts.Namespace, opts.Name, opts.Version)
 	if err != nil {
 		return nil, err
@@ -144,8 +143,7 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 	}
 
 	seen := make(map[string]struct{})
-	manifestDocs := make([]manifestItem, 0)
-	written := 0
+	planned := make([]plannedFile, 0)
 
 	for _, category := range opts.Categories {
 		for page := 1; ; page++ {
@@ -200,33 +198,52 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 					return nil, err
 				}
 
-				if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-					return nil, &WriteError{Path: filePath, Err: err}
-				}
-				if err := os.WriteFile(filePath, content, 0o644); err != nil {
-					return nil, &WriteError{Path: filePath, Err: err}
-				}
-
 				relPath, err := filepath.Rel(opts.OutDir, filePath)
 				if err != nil {
 					relPath = filePath
 				}
 
-				manifestDocs = append(manifestDocs, manifestItem{
-					DocID:    detail.Data.ID,
-					Category: detail.Data.Attributes.Category,
-					Slug:     slug,
-					Title:    detail.Data.Attributes.Title,
-					Path:     filepath.ToSlash(relPath),
+				planned = append(planned, plannedFile{
+					path:    filePath,
+					content: content,
+					item: manifestItem{
+						DocID:    detail.Data.ID,
+						Category: detail.Data.Attributes.Category,
+						Slug:     slug,
+						Title:    detail.Data.Attributes.Title,
+						Path:     filepath.ToSlash(relPath),
+					},
 				})
-				written++
 			}
 		}
 	}
 
-	sort.Slice(manifestDocs, func(i, j int) bool {
-		return manifestDocs[i].Path < manifestDocs[j].Path
+	sort.Slice(planned, func(i, j int) bool {
+		return planned[i].item.Path < planned[j].item.Path
 	})
+
+	if opts.Clean {
+		cleanTargets, err := deriveCleanTargets(opts, ext)
+		if err != nil {
+			return nil, err
+		}
+		for _, target := range cleanTargets {
+			if err := os.RemoveAll(target); err != nil {
+				return nil, &WriteError{Path: target, Err: err}
+			}
+		}
+	}
+
+	manifestDocs := make([]manifestItem, 0, len(planned))
+	for _, pf := range planned {
+		if err := os.MkdirAll(filepath.Dir(pf.path), 0o755); err != nil {
+			return nil, &WriteError{Path: pf.path, Err: err}
+		}
+		if err := os.WriteFile(pf.path, pf.content, 0o644); err != nil {
+			return nil, &WriteError{Path: pf.path, Err: err}
+		}
+		manifestDocs = append(manifestDocs, pf.item)
+	}
 
 	manifestPath, err := writeManifest(opts, manifestDocs)
 	if err != nil {
@@ -242,7 +259,7 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 		Provider: sanitizeSegment(opts.Name),
 		Version:  opts.Version,
 		OutDir:   opts.OutDir,
-		Written:  written,
+		Written:  len(planned),
 		Manifest: filepath.ToSlash(filepath.Join(opts.OutDir, relManifestPath)),
 	}, nil
 }
@@ -406,7 +423,7 @@ func renderContent(format string, detail providerDocDetailResponse, raw []byte) 
 }
 
 func writeManifest(opts ExportOptions, docs []manifestItem) (string, error) {
-	docsRoot := filepath.Join(opts.OutDir, "terraform", sanitizeSegment(opts.Name), sanitizeSegment(opts.Version), "docs")
+	docsRoot := manifestRootForOptions(opts)
 	if err := os.MkdirAll(docsRoot, 0o755); err != nil {
 		return "", &WriteError{Path: docsRoot, Err: err}
 	}
@@ -431,4 +448,76 @@ func writeManifest(opts ExportOptions, docs []manifestItem) (string, error) {
 		return "", &WriteError{Path: manifestPath, Err: err}
 	}
 	return manifestPath, nil
+}
+
+func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
+	templateRoot, err := deriveTemplateRoot(opts, ext)
+	if err != nil {
+		return nil, err
+	}
+	manifestRoot := manifestRootForOptions(opts)
+
+	targetSet := map[string]struct{}{
+		templateRoot: {},
+		manifestRoot: {},
+	}
+	targets := make([]string, 0, len(targetSet))
+	for target := range targetSet {
+		if target == opts.OutDir {
+			return nil, &ValidationError{Message: "--clean template resolves to --out-dir root, which is too broad"}
+		}
+		targets = append(targets, target)
+	}
+
+	// Remove deeper paths first to avoid broad parent deletes when roots overlap.
+	sort.Slice(targets, func(i, j int) bool {
+		return len(targets[i]) > len(targets[j])
+	})
+	return targets, nil
+}
+
+func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
+	template := opts.PathTemplate
+	known := map[string]string{
+		"out":       opts.OutDir,
+		"namespace": sanitizeSegment(opts.Namespace),
+		"provider":  sanitizeSegment(opts.Name),
+		"version":   sanitizeSegment(opts.Version),
+		"ext":       ext,
+	}
+	for k, v := range known {
+		template = strings.ReplaceAll(template, "{"+k+"}", v)
+	}
+
+	loc := rePlaceholder.FindStringIndex(template)
+	var prefix string
+	if loc == nil {
+		prefix = filepath.Dir(template)
+	} else {
+		prefix = template[:loc[0]]
+		if !strings.HasSuffix(prefix, "/") && !strings.HasSuffix(prefix, string(os.PathSeparator)) {
+			prefix = filepath.Dir(prefix)
+		}
+	}
+	if strings.TrimSpace(prefix) == "" || prefix == "." {
+		prefix = opts.OutDir
+	}
+
+	rootAbs, err := filepath.Abs(filepath.Clean(prefix))
+	if err != nil {
+		return "", &ValidationError{Message: fmt.Sprintf("failed to derive clean root from template: %v", err)}
+	}
+
+	outAbs, err := filepath.Abs(opts.OutDir)
+	if err != nil {
+		return "", &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
+	}
+	if rootAbs != outAbs && !strings.HasPrefix(rootAbs, outAbs+string(os.PathSeparator)) {
+		return "", &ValidationError{Message: "derived clean root is outside --out-dir"}
+	}
+	return rootAbs, nil
+}
+
+func manifestRootForOptions(opts ExportOptions) string {
+	return filepath.Join(opts.OutDir, "terraform", sanitizeSegment(opts.Name), sanitizeSegment(opts.Version), "docs")
 }

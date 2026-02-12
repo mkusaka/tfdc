@@ -52,7 +52,19 @@ func NewClient(cfg Config, cacheStore *cache.Store) (*Client, error) {
 		return nil, fmt.Errorf("invalid base url: %w", err)
 	}
 
-	transport := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.Insecure}}
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("unexpected default transport type")
+	}
+	transport = transport.Clone()
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	transport.TLSClientConfig.InsecureSkipVerify = cfg.Insecure
+	transport.Proxy = http.ProxyFromEnvironment
+
 	client := &http.Client{
 		Timeout:   cfg.Timeout,
 		Transport: transport,

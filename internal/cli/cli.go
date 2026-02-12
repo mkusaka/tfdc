@@ -104,15 +104,16 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 		return g, nil, fmt.Errorf("--retry must be >= 0")
 	}
 
-	if g.cacheTTL <= 0 {
-		return g, nil, fmt.Errorf("--cache-ttl must be positive")
+	if !g.noCache {
+		if g.cacheTTL <= 0 {
+			return g, nil, fmt.Errorf("--cache-ttl must be positive")
+		}
+		expanded, err := expandHomeDir(g.cacheDir)
+		if err != nil {
+			return g, nil, err
+		}
+		g.cacheDir = expanded
 	}
-
-	expanded, err := expandHomeDir(g.cacheDir)
-	if err != nil {
-		return g, nil, err
-	}
-	g.cacheDir = expanded
 
 	return g, fs.Args(), nil
 }

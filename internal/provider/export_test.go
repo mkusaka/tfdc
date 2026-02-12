@@ -81,6 +81,31 @@ func (f *fakeAPIClient) Get(_ context.Context, path string) ([]byte, error) {
 	}
 }
 
+type fakeVersionNotFoundClient struct{}
+
+func (f *fakeVersionNotFoundClient) GetJSON(_ context.Context, path string, dst any) error {
+	if strings.HasPrefix(path, "/v2/providers/hashicorp/aws") {
+		data := map[string]any{
+			"included": []any{
+				map[string]any{
+					"type": "provider-versions",
+					"id":   "70800",
+					"attributes": map[string]any{
+						"version": "0.0.1",
+					},
+				},
+			},
+		}
+		b, _ := json.Marshal(data)
+		return json.Unmarshal(b, dst)
+	}
+	return fmt.Errorf("unexpected GetJSON path: %s", path)
+}
+
+func (f *fakeVersionNotFoundClient) Get(_ context.Context, path string) ([]byte, error) {
+	return nil, fmt.Errorf("unexpected Get path: %s", path)
+}
+
 func TestExportDocs_WritesLayoutAndManifest(t *testing.T) {
 	outDir := t.TempDir()
 	client := &fakeAPIClient{}
@@ -149,5 +174,69 @@ func TestExportDocs_CleanRemovesExistingSubtree(t *testing.T) {
 
 	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
 		t.Fatalf("expected stale file to be removed by --clean")
+	}
+}
+
+func TestExportDocs_CleanDoesNotDeleteWhenVersionResolutionFails(t *testing.T) {
+	outDir := t.TempDir()
+	stalePath := filepath.Join(outDir, "terraform", "aws", "6.31.0", "docs", "guides", "stale.md")
+	if err := os.MkdirAll(filepath.Dir(stalePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeVersionNotFoundClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:  "hashicorp",
+		Name:       "aws",
+		Version:    "6.31.0",
+		Format:     "markdown",
+		OutDir:     outDir,
+		Categories: []string{"guides"},
+		Clean:      true,
+	})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+
+	if _, err := os.Stat(stalePath); err != nil {
+		t.Fatalf("expected stale file to remain when version resolution fails: %v", err)
+	}
+}
+
+func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
+	outDir := t.TempDir()
+	staleCustom := filepath.Join(outDir, "custom", "guides", "stale.md")
+	if err := os.MkdirAll(filepath.Dir(staleCustom), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staleCustom, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeAPIClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    "hashicorp",
+		Name:         "aws",
+		Version:      "6.31.0",
+		Format:       "markdown",
+		OutDir:       outDir,
+		Categories:   []string{"guides"},
+		PathTemplate: "{out}/custom/{category}/{slug}.{ext}",
+		Clean:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(staleCustom); !os.IsNotExist(err) {
+		t.Fatalf("expected stale custom file to be removed by --clean with custom template")
+	}
+
+	newGuide := filepath.Join(outDir, "custom", "guides", "tag-policy-compliance.md")
+	if _, err := os.Stat(newGuide); err != nil {
+		t.Fatalf("expected exported guide in custom template path: %v", err)
 	}
 }
