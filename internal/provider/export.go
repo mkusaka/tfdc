@@ -240,6 +240,9 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 			return nil, err
 		}
 		for _, target := range cleanTargets {
+			if err := ensureNoSymlinkTraversal(opts.OutDir, target); err != nil {
+				return nil, &ValidationError{Message: fmt.Sprintf("unsafe --clean target %s: %v", target, err)}
+			}
 			if err := os.RemoveAll(target); err != nil {
 				return nil, &WriteError{Path: target, Err: err}
 			}
@@ -248,6 +251,9 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 
 	manifestDocs := make([]manifestItem, 0, len(planned))
 	for _, pf := range planned {
+		if err := ensureNoSymlinkTraversal(opts.OutDir, pf.path); err != nil {
+			return nil, &ValidationError{Message: fmt.Sprintf("unsafe output path %s: %v", pf.path, err)}
+		}
 		if err := os.MkdirAll(filepath.Dir(pf.path), 0o755); err != nil {
 			return nil, &WriteError{Path: pf.path, Err: err}
 		}
@@ -436,6 +442,9 @@ func renderContent(format string, detail providerDocDetailResponse, raw []byte) 
 
 func writeManifest(opts ExportOptions, docs []manifestItem) (string, error) {
 	manifestPath := manifestPathForOptions(opts)
+	if err := ensureNoSymlinkTraversal(opts.OutDir, manifestPath); err != nil {
+		return "", &ValidationError{Message: fmt.Sprintf("unsafe manifest path %s: %v", manifestPath, err)}
+	}
 	docsRoot := filepath.Dir(manifestPath)
 	if err := os.MkdirAll(docsRoot, 0o755); err != nil {
 		return "", &WriteError{Path: docsRoot, Err: err}
@@ -524,7 +533,7 @@ func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
 	if err != nil {
 		return "", &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
 	}
-	if rootAbs != outAbs && !strings.HasPrefix(rootAbs, outAbs+string(os.PathSeparator)) {
+	if !isPathWithinDir(outAbs, rootAbs) {
 		return "", &ValidationError{Message: "derived clean root is outside --out-dir"}
 	}
 	return rootAbs, nil

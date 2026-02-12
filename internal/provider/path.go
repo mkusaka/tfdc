@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -35,11 +37,66 @@ func BuildOutputPath(template string, vars map[string]string, outDir string) (st
 		return "", err
 	}
 
-	if pathAbs != outAbs && !strings.HasPrefix(pathAbs, outAbs+string(os.PathSeparator)) {
+	if !isPathWithinDir(outAbs, pathAbs) {
 		return "", fmt.Errorf("output path is outside --out-dir: %s", pathAbs)
+	}
+	if err := ensureNoSymlinkTraversal(outAbs, pathAbs); err != nil {
+		return "", fmt.Errorf("output path crosses symlink outside --out-dir: %v", err)
 	}
 
 	return pathAbs, nil
+}
+
+func isPathWithinDir(baseAbs, targetAbs string) bool {
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func ensureNoSymlinkTraversal(baseAbs, targetAbs string) error {
+	if !isPathWithinDir(baseAbs, targetAbs) {
+		return fmt.Errorf("target is outside base dir: %s", targetAbs)
+	}
+
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return err
+	}
+
+	current := baseAbs
+	if err := rejectSymlinkIfExists(current); err != nil {
+		return err
+	}
+	if rel == "." {
+		return nil
+	}
+
+	for _, segment := range strings.Split(rel, string(os.PathSeparator)) {
+		if segment == "" || segment == "." {
+			continue
+		}
+		current = filepath.Join(current, segment)
+		if err := rejectSymlinkIfExists(current); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectSymlinkIfExists(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("symlink component detected: %s", path)
+	}
+	return nil
 }
 
 func sanitizeSegment(s string) string {

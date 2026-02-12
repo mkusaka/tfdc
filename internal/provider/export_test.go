@@ -310,6 +310,49 @@ func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
 	}
 }
 
+func TestExportDocs_CleanRejectsSymlinkedTargetOutsideOutDir(t *testing.T) {
+	outDir := t.TempDir()
+	externalDir := t.TempDir()
+
+	if err := os.Symlink(externalDir, filepath.Join(outDir, "terraform")); err != nil {
+		t.Skipf("symlink is not supported on this platform: %v", err)
+	}
+
+	externalVictim := filepath.Join(externalDir, "hashicorp", "aws", "6.31.0", "docs", "victim.txt")
+	if err := os.MkdirAll(filepath.Dir(externalVictim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(externalVictim, []byte("do-not-delete"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeAPIClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    "hashicorp",
+		Name:         "aws",
+		Version:      "6.31.0",
+		Format:       "markdown",
+		OutDir:       outDir,
+		Categories:   []string{"guides"},
+		PathTemplate: "{out}/custom/{category}/{slug}.{ext}",
+		Clean:        true,
+	})
+	if err == nil {
+		t.Fatalf("expected error for symlinked clean target")
+	}
+	var vErr *ValidationError
+	if !errors.As(err, &vErr) {
+		t.Fatalf("expected validation error, got %T (%v)", err, err)
+	}
+	if !strings.Contains(vErr.Error(), "unsafe --clean target") {
+		t.Fatalf("unexpected error message: %s", vErr.Error())
+	}
+
+	if _, err := os.Stat(externalVictim); err != nil {
+		t.Fatalf("expected external file to remain untouched: %v", err)
+	}
+}
+
 func TestExportDocs_PathTemplateCollisionReturnsValidationError(t *testing.T) {
 	outDir := t.TempDir()
 	client := &fakeCollisionClient{}
