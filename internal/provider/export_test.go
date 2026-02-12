@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -104,6 +105,74 @@ func (f *fakeVersionNotFoundClient) GetJSON(_ context.Context, path string, dst 
 
 func (f *fakeVersionNotFoundClient) Get(_ context.Context, path string) ([]byte, error) {
 	return nil, fmt.Errorf("unexpected Get path: %s", path)
+}
+
+type fakeCollisionClient struct{}
+
+func (f *fakeCollisionClient) GetJSON(_ context.Context, path string, dst any) error {
+	if strings.HasPrefix(path, "/v2/providers/hashicorp/aws") {
+		data := map[string]any{
+			"included": []any{
+				map[string]any{
+					"type": "provider-versions",
+					"id":   "70800",
+					"attributes": map[string]any{
+						"version": "6.31.0",
+					},
+				},
+			},
+		}
+		b, _ := json.Marshal(data)
+		return json.Unmarshal(b, dst)
+	}
+
+	if strings.HasPrefix(path, "/v2/provider-docs?") {
+		u, err := url.Parse(path)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		cat := q.Get("filter[category]")
+		page := q.Get("page[number]")
+		var data []map[string]any
+		switch {
+		case cat == "guides" && page == "1":
+			data = []map[string]any{{
+				"id": "100",
+				"attributes": map[string]any{
+					"category": "guides",
+					"slug":     "duplicate",
+					"title":    "Guide Duplicate",
+				},
+			}}
+		case cat == "resources" && page == "1":
+			data = []map[string]any{{
+				"id": "101",
+				"attributes": map[string]any{
+					"category": "resources",
+					"slug":     "duplicate",
+					"title":    "Resource Duplicate",
+				},
+			}}
+		default:
+			data = []map[string]any{}
+		}
+		b, _ := json.Marshal(map[string]any{"data": data})
+		return json.Unmarshal(b, dst)
+	}
+
+	return fmt.Errorf("unexpected GetJSON path: %s", path)
+}
+
+func (f *fakeCollisionClient) Get(_ context.Context, path string) ([]byte, error) {
+	switch path {
+	case "/v2/provider-docs/100":
+		return []byte(`{"data":{"id":"100","attributes":{"category":"guides","slug":"duplicate","title":"Guide Duplicate","content":"# g"}}}`), nil
+	case "/v2/provider-docs/101":
+		return []byte(`{"data":{"id":"101","attributes":{"category":"resources","slug":"duplicate","title":"Resource Duplicate","content":"# r"}}}`), nil
+	default:
+		return nil, fmt.Errorf("unexpected Get path: %s", path)
+	}
 }
 
 func TestExportDocs_WritesLayoutAndManifest(t *testing.T) {
@@ -238,5 +307,29 @@ func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
 	newGuide := filepath.Join(outDir, "custom", "guides", "tag-policy-compliance.md")
 	if _, err := os.Stat(newGuide); err != nil {
 		t.Fatalf("expected exported guide in custom template path: %v", err)
+	}
+}
+
+func TestExportDocs_PathTemplateCollisionReturnsValidationError(t *testing.T) {
+	outDir := t.TempDir()
+	client := &fakeCollisionClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    "hashicorp",
+		Name:         "aws",
+		Version:      "6.31.0",
+		Format:       "markdown",
+		OutDir:       outDir,
+		Categories:   []string{"guides", "resources"},
+		PathTemplate: "{out}/flat/{slug}.{ext}",
+	})
+	if err == nil {
+		t.Fatalf("expected path collision error")
+	}
+	var vErr *ValidationError
+	if !errors.As(err, &vErr) {
+		t.Fatalf("expected validation error, got %T (%v)", err, err)
+	}
+	if !strings.Contains(vErr.Error(), "path collision detected") {
+		t.Fatalf("unexpected error message: %s", vErr.Error())
 	}
 }

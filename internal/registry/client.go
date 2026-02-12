@@ -25,6 +25,12 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("registry API error: status=%d url=%s", e.StatusCode, e.URL)
 }
 
+type ConfigError struct {
+	Message string
+}
+
+func (e *ConfigError) Error() string { return e.Message }
+
 type Config struct {
 	BaseURL   string
 	Timeout   time.Duration
@@ -49,12 +55,12 @@ func NewClient(cfg Config, cacheStore *cache.Store) (*Client, error) {
 	}
 	base, err := url.Parse(cfg.BaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid base url: %w", err)
+		return nil, &ConfigError{Message: fmt.Sprintf("invalid base url: %v", err)}
 	}
 
 	transport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
-		return nil, fmt.Errorf("unexpected default transport type")
+		return nil, &ConfigError{Message: "unexpected default transport type"}
 	}
 	transport = transport.Clone()
 	if transport.TLSClientConfig == nil {

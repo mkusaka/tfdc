@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -25,5 +26,33 @@ func TestParseGlobalFlags_CacheEnabledExpandsCachePath(t *testing.T) {
 	}
 	if strings.HasPrefix(g.cacheDir, "~") {
 		t.Fatalf("expected cache dir to be expanded when cache is enabled, got %q", g.cacheDir)
+	}
+}
+
+func TestExecute_UnknownProviderExportFlagReturnsExitCode1(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+
+	code := Execute([]string{
+		"provider", "export",
+		"--unknown",
+	}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+}
+
+func TestExecute_InvalidRegistryURLReturnsExitCode1(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := Execute([]string{
+		"--registry-url", "://bad-url",
+		"provider", "export",
+		"--name", "aws",
+		"--version", "6.31.0",
+		"--out-dir", t.TempDir(),
+	}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
 }

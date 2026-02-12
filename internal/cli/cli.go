@@ -140,7 +140,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 	fs.BoolVar(&clean, "clean", false, "remove existing provider/version subtree before export")
 
 	if err := fs.Parse(args); err != nil {
-		return nil, err
+		return nil, &provider.ValidationError{Message: err.Error()}
 	}
 
 	if strings.TrimSpace(outDir) == "" {
@@ -149,7 +149,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 
 	outDirAbs, err := filepath.Abs(outDir)
 	if err != nil {
-		return nil, err
+		return nil, &provider.ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
 	}
 
 	cacheStore, err := cache.NewStore(g.cacheDir, g.cacheTTL, !g.noCache)
@@ -234,6 +234,11 @@ func mapErrorToExitCode(err error) int {
 	var wErr *provider.WriteError
 	if errors.As(err, &wErr) {
 		return 4
+	}
+
+	var cfgErr *registry.ConfigError
+	if errors.As(err, &cfgErr) {
+		return 1
 	}
 
 	return 3

@@ -144,6 +144,7 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 
 	seen := make(map[string]struct{})
 	planned := make([]plannedFile, 0)
+	pathOwners := make(map[string]string)
 
 	for _, category := range opts.Categories {
 		for page := 1; ; page++ {
@@ -192,6 +193,10 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 				if err != nil {
 					return nil, &ValidationError{Message: err.Error()}
 				}
+				if existing, exists := pathOwners[filePath]; exists {
+					return nil, &ValidationError{Message: fmt.Sprintf("path collision detected in --path-template: %s (doc_id=%s conflicts with doc_id=%s)", filePath, existing, detail.Data.ID)}
+				}
+				pathOwners[filePath] = detail.Data.ID
 
 				content, err := renderContent(opts.Format, detail, raw)
 				if err != nil {
