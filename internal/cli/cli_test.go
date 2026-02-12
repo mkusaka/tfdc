@@ -31,6 +31,16 @@ func TestParseGlobalFlags_CacheEnabledExpandsCachePath(t *testing.T) {
 	}
 }
 
+func TestParseGlobalFlags_RejectsEmptyCacheDirWhenCacheEnabled(t *testing.T) {
+	_, _, err := parseGlobalFlags([]string{"--cache-dir", "", "provider", "export"})
+	if err == nil {
+		t.Fatalf("expected error for empty --cache-dir")
+	}
+	if !strings.Contains(err.Error(), "--cache-dir must not be empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestExecute_UnknownProviderExportFlagReturnsExitCode1(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer

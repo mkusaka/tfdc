@@ -74,3 +74,26 @@ func TestBuildOutputPath_RejectsSymlinkTraversalOutsideOutDir(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestBuildOutputPath_RejectsUnresolvedPlaceholderWithHyphen(t *testing.T) {
+	outDir := t.TempDir()
+	tpl := "{out}/terraform/{namespace}/{provider}/{version}/docs/{unknown-placeholder}/{slug}.{ext}"
+	vars := map[string]string{
+		"out":       outDir,
+		"namespace": "hashicorp",
+		"provider":  "aws",
+		"version":   "6.31.0",
+		"slug":      "tag-policy-compliance",
+		"ext":       "md",
+	}
+	_, err := BuildOutputPath(tpl, vars, outDir)
+	if err == nil {
+		t.Fatalf("expected unresolved placeholder error")
+	}
+	if !strings.Contains(err.Error(), "unresolved placeholder") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "{unknown-placeholder}") {
+		t.Fatalf("unexpected placeholder in error: %v", err)
+	}
+}

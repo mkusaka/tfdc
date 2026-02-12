@@ -123,6 +123,9 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 		if err != nil {
 			return g, nil, err
 		}
+		if strings.TrimSpace(expanded) == "" {
+			return g, nil, fmt.Errorf("--cache-dir must not be empty")
+		}
 		g.cacheDir = expanded
 	}
 

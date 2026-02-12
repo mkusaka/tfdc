@@ -14,7 +14,7 @@ const DefaultPathTemplate = "{out}/terraform/{namespace}/{provider}/{version}/do
 
 var (
 	reInvalidSegment = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-	rePlaceholder    = regexp.MustCompile(`\{[a-zA-Z0-9_]+\}`)
+	rePlaceholder    = regexp.MustCompile(`\{[^{}]+\}`)
 )
 
 func BuildOutputPath(template string, vars map[string]string, outDir string) (string, error) {
