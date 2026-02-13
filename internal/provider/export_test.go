@@ -244,6 +244,24 @@ func (f *fakeDetailRecoverClient) Get(_ context.Context, path string) ([]byte, e
 	return nil, fmt.Errorf("unexpected Get path: %s", path)
 }
 
+type fakeDetailRecoverRefetchErrorClient struct {
+	refetchErr error
+}
+
+func (f *fakeDetailRecoverRefetchErrorClient) GetJSON(_ context.Context, path string, dst any) error {
+	if strings.HasPrefix(path, "/v2/provider-docs/1") {
+		return f.refetchErr
+	}
+	return fmt.Errorf("unexpected GetJSON path: %s", path)
+}
+
+func (f *fakeDetailRecoverRefetchErrorClient) Get(_ context.Context, path string) ([]byte, error) {
+	if strings.HasPrefix(path, "/v2/provider-docs/1") {
+		return []byte("not-json"), nil
+	}
+	return nil, fmt.Errorf("unexpected Get path: %s", path)
+}
+
 func TestExportDocs_WritesLayoutAndManifest(t *testing.T) {
 	outDir := t.TempDir()
 	client := &fakeAPIClient{}
@@ -309,6 +327,19 @@ func TestExportDocs_RecoversFromInvalidDetailJSONViaGetJSON(t *testing.T) {
 	}
 	if summary.Written != 1 {
 		t.Fatalf("unexpected written count: %d", summary.Written)
+	}
+}
+
+func TestGetProviderDocDetail_PropagatesRefetchError(t *testing.T) {
+	wantErr := &NotFoundError{Message: "provider doc not found"}
+	client := &fakeDetailRecoverRefetchErrorClient{refetchErr: wantErr}
+
+	_, _, err := getProviderDocDetail(context.Background(), client, "1")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected refetch error to be propagated, got %T (%v)", err, err)
 	}
 }
 
