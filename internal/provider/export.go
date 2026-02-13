@@ -419,11 +419,13 @@ func getProviderDocDetail(ctx context.Context, client APIClient, docID string) (
 		if jsonErr := client.GetJSON(ctx, path, &detail); jsonErr != nil {
 			return detail, nil, jsonErr
 		}
-		recovered, marshalErr := json.Marshal(detail)
-		if marshalErr != nil {
-			return detail, nil, marshalErr
+		// Re-read raw after successful recovery so --format json preserves
+		// fields that are not represented in providerDocDetailResponse.
+		recoveredRaw, getErr := client.Get(ctx, path)
+		if getErr != nil {
+			return detail, nil, getErr
 		}
-		return detail, recovered, nil
+		return detail, recoveredRaw, nil
 	}
 	return detail, raw, nil
 }

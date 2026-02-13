@@ -262,6 +262,71 @@ func (f *fakeDetailRecoverRefetchErrorClient) Get(_ context.Context, path string
 	return nil, fmt.Errorf("unexpected Get path: %s", path)
 }
 
+type fakeDetailRecoverRawPreserveClient struct {
+	getDetailCalls int
+}
+
+func (f *fakeDetailRecoverRawPreserveClient) GetJSON(_ context.Context, path string, dst any) error {
+	if strings.HasPrefix(path, "/v2/providers/hashicorp/aws") {
+		data := map[string]any{
+			"included": []any{
+				map[string]any{
+					"type": "provider-versions",
+					"id":   "70800",
+					"attributes": map[string]any{
+						"version": "6.31.0",
+					},
+				},
+			},
+		}
+		b, _ := json.Marshal(data)
+		return json.Unmarshal(b, dst)
+	}
+
+	if strings.HasPrefix(path, "/v2/provider-docs?") {
+		u, err := url.Parse(path)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		cat := q.Get("filter[category]")
+		page := q.Get("page[number]")
+		if cat == "guides" && page == "1" {
+			b, _ := json.Marshal(map[string]any{
+				"data": []map[string]any{{
+					"id": "1",
+					"attributes": map[string]any{
+						"category": "guides",
+						"slug":     "tag-policy-compliance",
+						"title":    "Tag Policy Compliance",
+					},
+				}},
+			})
+			return json.Unmarshal(b, dst)
+		}
+		b, _ := json.Marshal(map[string]any{"data": []any{}})
+		return json.Unmarshal(b, dst)
+	}
+
+	if strings.HasPrefix(path, "/v2/provider-docs/1") {
+		const recoveredRaw = `{"data":{"id":"1","type":"provider-docs","links":{"self":"https://registry.terraform.io/v2/provider-docs/1"},"attributes":{"category":"guides","subcategory":"policy","language":"hcl","truncated":false,"slug":"tag-policy-compliance","title":"Tag Policy Compliance","content":"# guide content"}}}`
+		return json.Unmarshal([]byte(recoveredRaw), dst)
+	}
+
+	return fmt.Errorf("unexpected GetJSON path: %s", path)
+}
+
+func (f *fakeDetailRecoverRawPreserveClient) Get(_ context.Context, path string) ([]byte, error) {
+	if strings.HasPrefix(path, "/v2/provider-docs/1") {
+		f.getDetailCalls++
+		if f.getDetailCalls == 1 {
+			return []byte("not-json"), nil
+		}
+		return []byte(`{"data":{"id":"1","type":"provider-docs","links":{"self":"https://registry.terraform.io/v2/provider-docs/1"},"attributes":{"category":"guides","subcategory":"policy","language":"hcl","truncated":false,"slug":"tag-policy-compliance","title":"Tag Policy Compliance","content":"# guide content"}}}`), nil
+	}
+	return nil, fmt.Errorf("unexpected Get path: %s", path)
+}
+
 func TestExportDocs_WritesLayoutAndManifest(t *testing.T) {
 	outDir := t.TempDir()
 	client := &fakeAPIClient{}
@@ -340,6 +405,42 @@ func TestGetProviderDocDetail_PropagatesRefetchError(t *testing.T) {
 	}
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected refetch error to be propagated, got %T (%v)", err, err)
+	}
+}
+
+func TestExportDocs_JSONRecoveryPreservesRawFields(t *testing.T) {
+	outDir := t.TempDir()
+	client := &fakeDetailRecoverRawPreserveClient{}
+
+	summary, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:  "hashicorp",
+		Name:       "aws",
+		Version:    "6.31.0",
+		Format:     "json",
+		OutDir:     outDir,
+		Categories: []string{"guides"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if summary.Written != 1 {
+		t.Fatalf("unexpected written count: %d", summary.Written)
+	}
+
+	guidePath := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "guides", "tag-policy-compliance.json")
+	body, err := os.ReadFile(guidePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"links":`) {
+		t.Fatalf("expected recovered raw json to keep data.links, got: %s", string(body))
+	}
+	if !strings.Contains(string(body), `"language": "hcl"`) {
+		t.Fatalf("expected recovered raw json to keep attributes.language, got: %s", string(body))
+	}
+	if client.getDetailCalls != 2 {
+		t.Fatalf("expected detail endpoint to be read twice (initial+recovered), got %d", client.getDetailCalls)
 	}
 }
 
