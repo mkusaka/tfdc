@@ -99,28 +99,47 @@ func NewClient(cfg Config, cacheStore *cache.Store) (*Client, error) {
 }
 
 func (c *Client) GetJSON(ctx context.Context, path string, dst any) error {
-	b, err := c.Get(ctx, path)
+	b, fromCache, err := c.get(ctx, path, true)
 	if err != nil {
 		return err
 	}
 	if err := json.Unmarshal(b, dst); err != nil {
-		return fmt.Errorf("failed to decode json response: %w", err)
+		if !fromCache {
+			return fmt.Errorf("failed to decode json response: %w", err)
+		}
+		// If cached payload is undecodable, treat it as cache miss and refetch.
+		fresh, _, refetchErr := c.get(ctx, path, false)
+		if refetchErr != nil {
+			return refetchErr
+		}
+		if err := json.Unmarshal(fresh, dst); err != nil {
+			return fmt.Errorf("failed to decode json response: %w", err)
+		}
+		return nil
 	}
 	return nil
 }
 
 func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
-	fullURL, err := c.resolve(path)
+	b, _, err := c.get(ctx, path, true)
 	if err != nil {
 		return nil, err
 	}
+	return b, nil
+}
 
-	if c.cache != nil {
+func (c *Client) get(ctx context.Context, path string, readCache bool) ([]byte, bool, error) {
+	fullURL, err := c.resolve(path)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if readCache && c.cache != nil {
 		if b, ok, err := c.cache.Get(http.MethodGet, fullURL); err == nil && ok {
 			if c.debug {
 				fmt.Fprintf(os.Stderr, "cache hit: %s\n", fullURL)
 			}
-			return b, nil
+			return b, true, nil
 		}
 	}
 
@@ -132,7 +151,7 @@ func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("User-Agent", c.userAgent)
 
@@ -142,7 +161,7 @@ func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
 			if attempt < c.retry {
 				continue
 			}
-			return nil, err
+			return nil, false, err
 		}
 
 		body, readErr := io.ReadAll(resp.Body)
@@ -155,7 +174,7 @@ func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
 			if attempt < c.retry {
 				continue
 			}
-			return nil, readErr
+			return nil, false, readErr
 		}
 
 		if resp.StatusCode != http.StatusOK {
@@ -164,20 +183,20 @@ func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
 			if (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError) && attempt < c.retry {
 				continue
 			}
-			return nil, apiErr
+			return nil, false, apiErr
 		}
 
 		if c.cache != nil {
 			_ = c.cache.Set(http.MethodGet, fullURL, resp.StatusCode, resp.Header.Get("Content-Type"), body)
 		}
 
-		return body, nil
+		return body, false, nil
 	}
 
 	if lastErr != nil {
-		return nil, lastErr
+		return nil, false, lastErr
 	}
-	return nil, fmt.Errorf("unexpected error in get request")
+	return nil, false, fmt.Errorf("unexpected error in get request")
 }
 
 func (c *Client) resolve(path string) (string, error) {

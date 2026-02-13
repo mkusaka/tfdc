@@ -1,12 +1,17 @@
 package registry
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/mkusaka/terraform-docs-cli/internal/cache"
 )
 
 func TestNewClient_UsesProxyFromEnvironment(t *testing.T) {
@@ -104,5 +109,54 @@ func TestResolve_RootBasePathStillUsesRoot(t *testing.T) {
 	want := "https://registry.terraform.io/v2/providers/hashicorp/aws"
 	if got != want {
 		t.Fatalf("unexpected resolved URL\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+func TestGetJSON_RefetchesWhenCachedPayloadIsInvalidJSON(t *testing.T) {
+	var requestCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	store, err := cache.NewStore(t.TempDir(), time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := NewClient(Config{BaseURL: srv.URL, Timeout: 5 * time.Second}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := "/v2/provider-docs/1"
+	fullURL, err := c.resolve(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set(http.MethodGet, fullURL, http.StatusOK, "application/json", []byte("not-json")); err != nil {
+		t.Fatal(err)
+	}
+
+	var dst map[string]any
+	if err := c.GetJSON(context.Background(), path, &dst); err != nil {
+		t.Fatalf("expected cache decode fallback to succeed, got error: %v", err)
+	}
+	if requestCount.Load() != 1 {
+		t.Fatalf("expected one network request for refetch, got %d", requestCount.Load())
+	}
+	if got, ok := dst["ok"].(bool); !ok || !got {
+		t.Fatalf("unexpected decoded payload: %#v", dst)
+	}
+
+	// The refetched valid body should be cached and reused.
+	dst = nil
+	if err := c.GetJSON(context.Background(), path, &dst); err != nil {
+		t.Fatalf("expected second call to succeed from refreshed cache, got error: %v", err)
+	}
+	if requestCount.Load() != 1 {
+		t.Fatalf("expected no additional network request on second call, got %d", requestCount.Load())
 	}
 }
