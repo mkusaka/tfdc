@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/mkusaka/terraform-docs-cli/internal/cache"
+	"github.com/mkusaka/terraform-docs-cli/internal/lockfile"
 	"github.com/mkusaka/terraform-docs-cli/internal/provider"
 	"github.com/mkusaka/terraform-docs-cli/internal/registry"
 )
 
 type globalFlags struct {
+	chdir       string
 	output      string
 	write       string
 	timeout     time.Duration
@@ -62,13 +64,13 @@ func Execute(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "provider":
 		switch cmd {
 		case "export":
-			summary, runErr := runProviderExport(ctx, g, subArgs)
+			summaries, runErr := runProviderExport(ctx, g, subArgs, stderr)
 			if runErr != nil {
 				code := mapErrorToExitCode(runErr)
 				_, _ = fmt.Fprintln(stderr, runErr)
 				return code
 			}
-			if err := writeSummary(g, summary, stdout); err != nil {
+			if err := writeSummaries(g, summaries, stdout); err != nil {
 				_, _ = fmt.Fprintln(stderr, err)
 				return 4
 			}
@@ -89,6 +91,7 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	fs := flag.NewFlagSet("terraform-docs-cli", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
+	fs.StringVar(&g.chdir, "chdir", "", "switch to a different working directory before executing")
 	fs.StringVar(&g.output, "output", "text", "output format: text|json|markdown")
 	fs.StringVar(&g.output, "o", "text", "output format: text|json|markdown")
 	fs.StringVar(&g.write, "write", "", "write output to file path")
@@ -132,7 +135,7 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	return g, fs.Args(), nil
 }
 
-func runProviderExport(ctx context.Context, g globalFlags, args []string) (*provider.ExportSummary, error) {
+func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr io.Writer) ([]provider.ExportSummary, error) {
 	var namespace string
 	var name string
 	var version string
@@ -141,6 +144,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 	var categories string
 	var pathTemplate string
 	var clean bool
+	var lockfilePath string
 
 	fs := flag.NewFlagSet("provider export", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -152,6 +156,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 	fs.StringVar(&categories, "categories", "all", "categories list or all")
 	fs.StringVar(&pathTemplate, "path-template", provider.DefaultPathTemplate, "output path template")
 	fs.BoolVar(&clean, "clean", false, "remove existing provider/version subtree before export")
+	fs.StringVar(&lockfilePath, "lockfile", "", "path to .terraform.lock.hcl")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, &provider.ValidationError{Message: err.Error()}
@@ -160,6 +165,20 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 		return nil, &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
 	}
 
+	// Resolve lockfile path: explicit --lockfile takes precedence over -chdir auto-detection.
+	resolvedLockfile := resolveLockfilePath(lockfilePath, g.chdir)
+
+	if resolvedLockfile != "" {
+		return runLockfileExport(ctx, g, resolvedLockfile, name, version, stderr, provider.ExportOptions{
+			Format:       strings.ToLower(format),
+			OutDir:       outDir,
+			Categories:   []string{categories},
+			PathTemplate: pathTemplate,
+			Clean:        clean,
+		})
+	}
+
+	// Legacy mode: --name and --version required.
 	opts := provider.ExportOptions{
 		Namespace:    namespace,
 		Name:         name,
@@ -174,12 +193,95 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 		return nil, err
 	}
 
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return nil, err
+	}
+
+	summary, err := provider.ExportDocs(ctx, client, opts)
+	if err != nil {
+		return nil, err
+	}
+	return []provider.ExportSummary{*summary}, nil
+}
+
+func resolveLockfilePath(explicit, chdir string) string {
+	if strings.TrimSpace(explicit) != "" {
+		return explicit
+	}
+	if strings.TrimSpace(chdir) != "" {
+		return filepath.Join(chdir, ".terraform.lock.hcl")
+	}
+	return ""
+}
+
+func runLockfileExport(ctx context.Context, g globalFlags, lockfilePath, nameFilter, versionFlag string, stderr io.Writer, baseOpts provider.ExportOptions) ([]provider.ExportSummary, error) {
+	if strings.TrimSpace(versionFlag) != "" {
+		_, _ = fmt.Fprintln(stderr, "warning: --version is ignored when using --lockfile or -chdir")
+	}
+
+	locks, err := lockfile.ParseFile(lockfilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(nameFilter) != "" {
+		filtered := make([]lockfile.ProviderLock, 0, 1)
+		for _, lock := range locks {
+			if strings.EqualFold(lock.Name, nameFilter) {
+				filtered = append(filtered, lock)
+			}
+		}
+		if len(filtered) == 0 {
+			return nil, &provider.NotFoundError{Message: fmt.Sprintf("provider %q not found in lockfile %s", nameFilter, lockfilePath)}
+		}
+		locks = filtered
+	}
+
+	if len(locks) == 0 {
+		return nil, &provider.NotFoundError{Message: fmt.Sprintf("no providers found in lockfile %s", lockfilePath)}
+	}
+
+	// Validate base options before starting exports.
+	// Use the first lock for preflight since Name/Version/Namespace
+	// will be overridden per provider anyway.
+	preflightOpts := baseOpts
+	preflightOpts.Namespace = locks[0].Namespace
+	preflightOpts.Name = locks[0].Name
+	preflightOpts.Version = locks[0].Version
+	if err := provider.PreflightExportOptions(&preflightOpts); err != nil {
+		return nil, err
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return nil, err
+	}
+
+	summaries := make([]provider.ExportSummary, 0, len(locks))
+	for _, lock := range locks {
+		opts := baseOpts
+		opts.Namespace = lock.Namespace
+		opts.Name = lock.Name
+		opts.Version = lock.Version
+
+		summary, exportErr := provider.ExportDocs(ctx, client, opts)
+		if exportErr != nil {
+			return nil, exportErr
+		}
+		summaries = append(summaries, *summary)
+	}
+
+	return summaries, nil
+}
+
+func buildRegistryClient(g globalFlags) (*registry.Client, error) {
 	cacheStore, err := cache.NewStore(g.cacheDir, g.cacheTTL, !g.noCache)
 	if err != nil {
 		return nil, &CacheInitError{Path: g.cacheDir, Err: err}
 	}
 
-	client, err := registry.NewClient(registry.Config{
+	return registry.NewClient(registry.Config{
 		BaseURL:   g.registryURL,
 		Timeout:   g.timeout,
 		Retry:     g.retry,
@@ -187,11 +289,54 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string) (*prov
 		UserAgent: g.userAgent,
 		Debug:     g.debug,
 	}, cacheStore)
-	if err != nil {
-		return nil, err
+}
+
+func writeSummaries(g globalFlags, summaries []provider.ExportSummary, stdout io.Writer) error {
+	if len(summaries) == 1 {
+		return writeSummary(g, &summaries[0], stdout)
 	}
 
-	return provider.ExportDocs(ctx, client, opts)
+	var b []byte
+	var err error
+
+	switch g.output {
+	case "json":
+		b, err = json.MarshalIndent(summaries, "", "  ")
+		if err == nil {
+			b = append(b, '\n')
+		}
+	case "markdown":
+		var buf strings.Builder
+		for i, s := range summaries {
+			if i > 0 {
+				buf.WriteString("\n")
+			}
+			fmt.Fprintf(&buf, "## %s\n\n", s.Provider)
+			fmt.Fprintf(&buf, "- provider: `%s`\n- version: `%s`\n- written: `%d`\n- manifest: `%s`\n", s.Provider, s.Version, s.Written, s.Manifest)
+		}
+		b = []byte(buf.String())
+	default:
+		var buf strings.Builder
+		for i, s := range summaries {
+			if i > 0 {
+				buf.WriteString("\n")
+			}
+			fmt.Fprintf(&buf, "exported %d docs for %s@%s\nmanifest: %s\n", s.Written, s.Provider, s.Version, s.Manifest)
+		}
+		b = []byte(buf.String())
+	}
+	if err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(g.write) != "" {
+		if err := os.MkdirAll(filepath.Dir(g.write), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(g.write, b, 0o644)
+	}
+	_, err = stdout.Write(b)
+	return err
 }
 
 func writeSummary(g globalFlags, summary *provider.ExportSummary, stdout io.Writer) error {
