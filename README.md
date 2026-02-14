@@ -1,8 +1,8 @@
 # terraform-docs-cli
 
-Standalone CLI inspired by <https://github.com/hashicorp/terraform-mcp-server>.
+A Go CLI for exporting Terraform Registry documentation to local files with deterministic paths and persistent caching.
 
-It is intended to fetch Terraform documentation from Terraform Registry APIs and persist docs for local review/automation workflows.
+Inspired by <https://github.com/hashicorp/terraform-mcp-server>.
 
 ## Current Status
 
@@ -21,6 +21,24 @@ Current command tree:
 
 ```text
 terraform-docs-cli [global flags] provider export [flags]
+```
+
+## Install
+
+Install with Go:
+
+```bash
+go install github.com/mkusaka/terraform-docs-cli/cmd/terraform-docs-cli@latest
+terraform-docs-cli --help
+```
+
+Build from source (for branch-specific changes):
+
+```bash
+git clone https://github.com/mkusaka/terraform-docs-cli.git
+cd terraform-docs-cli
+go build -o bin/terraform-docs-cli ./cmd/terraform-docs-cli
+./bin/terraform-docs-cli --help
 ```
 
 ## Quick Start
