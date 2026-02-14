@@ -14,6 +14,7 @@ import (
 
 	"github.com/mkusaka/terraform-docs-cli/internal/cache"
 	"github.com/mkusaka/terraform-docs-cli/internal/lockfile"
+	"github.com/mkusaka/terraform-docs-cli/internal/progress"
 	"github.com/mkusaka/terraform-docs-cli/internal/provider"
 	"github.com/mkusaka/terraform-docs-cli/internal/registry"
 )
@@ -168,8 +169,11 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 	// Resolve lockfile path: explicit --lockfile takes precedence over -chdir auto-detection.
 	resolvedLockfile := resolveLockfilePath(lockfilePath, g.chdir)
 
+	spinner := progress.New(stderr)
+	defer spinner.Stop()
+
 	if resolvedLockfile != "" {
-		return runLockfileExport(ctx, g, resolvedLockfile, name, version, stderr, provider.ExportOptions{
+		return runLockfileExport(ctx, g, resolvedLockfile, name, version, stderr, spinner, provider.ExportOptions{
 			Format:       strings.ToLower(format),
 			OutDir:       outDir,
 			Categories:   []string{categories},
@@ -198,6 +202,9 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 		return nil, err
 	}
 
+	spinner.Start(fmt.Sprintf("Exporting %s/%s@%s", namespace, name, version))
+	opts.OnProgress = func(msg string) { spinner.Update(msg) }
+
 	summary, err := provider.ExportDocs(ctx, client, opts)
 	if err != nil {
 		return nil, err
@@ -215,7 +222,7 @@ func resolveLockfilePath(explicit, chdir string) string {
 	return ""
 }
 
-func runLockfileExport(ctx context.Context, g globalFlags, lockfilePath, nameFilter, versionFlag string, stderr io.Writer, baseOpts provider.ExportOptions) ([]provider.ExportSummary, error) {
+func runLockfileExport(ctx context.Context, g globalFlags, lockfilePath, nameFilter, versionFlag string, stderr io.Writer, spinner *progress.Spinner, baseOpts provider.ExportOptions) ([]provider.ExportSummary, error) {
 	if strings.TrimSpace(versionFlag) != "" {
 		_, _ = fmt.Fprintln(stderr, "warning: --version is ignored when using --lockfile or -chdir")
 	}
@@ -258,12 +265,18 @@ func runLockfileExport(ctx context.Context, g globalFlags, lockfilePath, nameFil
 		return nil, err
 	}
 
+	spinner.Start(fmt.Sprintf("Exporting %d providers from lockfile", len(locks)))
+
 	summaries := make([]provider.ExportSummary, 0, len(locks))
-	for _, lock := range locks {
+	for i, lock := range locks {
 		opts := baseOpts
 		opts.Namespace = lock.Namespace
 		opts.Name = lock.Name
 		opts.Version = lock.Version
+		prefix := fmt.Sprintf("[%d/%d] %s", i+1, len(locks), lock.Name)
+		opts.OnProgress = func(msg string) {
+			spinner.Update(fmt.Sprintf("%s: %s", prefix, msg))
+		}
 
 		summary, exportErr := provider.ExportDocs(ctx, client, opts)
 		if exportErr != nil {

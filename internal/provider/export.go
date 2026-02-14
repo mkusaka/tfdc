@@ -48,6 +48,7 @@ type ExportOptions struct {
 	Categories   []string
 	PathTemplate string
 	Clean        bool
+	OnProgress   func(string)
 }
 
 type ExportSummary struct {
@@ -132,11 +133,17 @@ var defaultCategories = []string{
 }
 
 func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*ExportSummary, error) {
+	progress := opts.OnProgress
+	if progress == nil {
+		progress = func(string) {}
+	}
+
 	ext, err := prepareExportOptions(&opts)
 	if err != nil {
 		return nil, err
 	}
 
+	progress(fmt.Sprintf("Resolving %s/%s@%s", opts.Namespace, opts.Name, opts.Version))
 	providerVersionID, err := resolveProviderVersionID(ctx, client, opts.Namespace, opts.Name, opts.Version)
 	if err != nil {
 		return nil, err
@@ -147,8 +154,10 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 	pathOwners := make(map[string]string)
 	pathOwners[manifestPathForOptions(opts)] = reservedManifestPathOwner
 
+	docCount := 0
 	for _, category := range opts.Categories {
 		for page := 1; ; page++ {
+			progress(fmt.Sprintf("Listing %s (page %d)", category, page))
 			docs, err := listProviderDocs(ctx, client, providerVersionID, category, page)
 			if err != nil {
 				return nil, err
@@ -164,7 +173,9 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 				}
 				seen[doc.ID] = struct{}{}
 				newDocsOnPage++
+				docCount++
 
+				progress(fmt.Sprintf("Fetching %s/%s (%d docs)", category, doc.Attributes.Slug, docCount))
 				detail, raw, err := getProviderDocDetail(ctx, client, doc.ID, opts.Format == "json")
 				if err != nil {
 					return nil, err
