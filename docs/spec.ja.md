@@ -1,8 +1,8 @@
-# terraform-docs-cli 仕様書
+# tfdc 仕様書
 
 ## 1. 目的
 
-`terraform-docs-cli` は Terraform Registry および Terraform ドキュメントを参照し、Terraform の実装・レビューに必要なドキュメントを CLI から取得するためのツールである。
+`tfdc` は Terraform Registry および Terraform ドキュメントを参照し、Terraform の実装・レビューに必要なドキュメントを CLI から取得するためのツールである。
 
 本仕様は以下を定義する。
 
@@ -50,7 +50,7 @@
 ### 5.1 コマンドツリー
 
 ```text
-terraform-docs-cli [global flags] <group> <command> [flags]
+tfdc [global flags] <group> <command> [flags]
 
 group:
   provider
@@ -69,7 +69,7 @@ group:
 -insecure       TLS検証スキップ
 -user-agent     User-Agent上書き
 -debug          デバッグログ出力
--cache-dir      キャッシュディレクトリ (default: ~/.cache/terraform-docs-cli)
+-cache-dir      キャッシュディレクトリ (default: ~/.cache/tfdc)
 -cache-ttl      キャッシュ有効期間     (default: 24h)
 -no-cache       キャッシュを無効化
 ```
@@ -83,7 +83,7 @@ group:
 Provider ドキュメント候補を検索し、`provider_doc_id` を返す。
 
 ```text
-terraform-docs-cli provider search \
+tfdc provider search \
   -name aws \
   -namespace hashicorp \
   -service ec2 \
@@ -117,7 +117,7 @@ terraform-docs-cli provider search \
 `provider_doc_id` を指定して全文取得。
 
 ```text
-terraform-docs-cli provider get -doc-id 8894603
+tfdc provider get -doc-id 8894603
 ```
 
 入力:
@@ -134,7 +134,7 @@ terraform-docs-cli provider get -doc-id 8894603
 検索と取得を1コマンドで実行する convenience command。
 
 ```text
-terraform-docs-cli provider doc \
+tfdc provider doc \
   -name aws -namespace hashicorp -service ec2 -type resources \
   [-version latest] [-select best]
 ```
@@ -152,13 +152,13 @@ terraform-docs-cli provider doc \
 #### 6.1.4 `provider latest-version`
 
 ```text
-terraform-docs-cli provider latest-version -namespace hashicorp -name aws
+tfdc provider latest-version -namespace hashicorp -name aws
 ```
 
 #### 6.1.5 `provider capabilities`
 
 ```text
-terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-version latest]
+tfdc provider capabilities -namespace hashicorp -name aws [-version latest]
 ```
 
 #### 6.1.6 `provider export`
@@ -166,7 +166,7 @@ terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-versio
 特定 provider の特定 version の docs を全件取得し、指定ディレクトリ配下に保存する。
 
 ```text
-terraform-docs-cli provider export \
+tfdc provider export \
   -namespace hashicorp \
   -name aws \
   -version 6.31.0 \
@@ -204,7 +204,7 @@ terraform-docs-cli provider export \
 #### 6.2.1 `module search`
 
 ```text
-terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
+tfdc module search -query vpc [-offset 0] [-limit 20]
 ```
 
 出力項目:
@@ -219,7 +219,7 @@ terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
 #### 6.2.2 `module get`
 
 ```text
-terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
+tfdc module get -id terraform-aws-modules/vpc/aws/6.0.1
 ```
 
 入力制約:
@@ -229,7 +229,7 @@ terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
 #### 6.2.3 `module latest-version`
 
 ```text
-terraform-docs-cli module latest-version \
+tfdc module latest-version \
   -publisher terraform-aws-modules \
   -name vpc \
   -provider aws
@@ -240,7 +240,7 @@ terraform-docs-cli module latest-version \
 #### 6.3.1 `policy search`
 
 ```text
-terraform-docs-cli policy search -query cis
+tfdc policy search -query cis
 ```
 
 出力項目:
@@ -253,7 +253,7 @@ terraform-docs-cli policy search -query cis
 #### 6.3.2 `policy get`
 
 ```text
-terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
+tfdc policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
 ```
 
 ### 6.4 Guide
@@ -261,13 +261,13 @@ terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terr
 #### 6.4.1 `guide style`
 
 ```text
-terraform-docs-cli guide style
+tfdc guide style
 ```
 
 #### 6.4.2 `guide module-dev`
 
 ```text
-terraform-docs-cli guide module-dev [-section all]
+tfdc guide module-dev [-section all]
 ```
 
 `-section`:
@@ -342,7 +342,7 @@ terraform-docs-cli guide module-dev [-section all]
 ### 10.1 パッケージ構成（想定）
 
 ```text
-cmd/terraform-docs-cli/
+cmd/tfdc/
 internal/cli/           # cobra command定義
 internal/client/        # HTTP client, retry, tls
 internal/registry/      # provider/module/policy API呼び出し
@@ -353,7 +353,7 @@ internal/output/        # stdout/file writer
 ### 10.2 HTTP クライアント
 
 - timeout/retry/insecure をグローバルフラグから注入
-- User-Agent は `terraform-docs-cli/<version>`
+- User-Agent は `tfdc/<version>`
 
 ### 10.3 検証
 

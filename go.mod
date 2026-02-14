@@ -1,4 +1,4 @@
-module github.com/mkusaka/terraform-docs-cli
+module github.com/mkusaka/tfdc
 
 go 1.23.0
 

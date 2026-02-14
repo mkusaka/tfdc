@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mkusaka/terraform-docs-cli/internal/cache"
+	"github.com/mkusaka/tfdc/internal/cache"
 )
 
 func TestNewClient_UsesProxyFromEnvironment(t *testing.T) {

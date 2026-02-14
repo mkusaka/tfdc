@@ -1,4 +1,4 @@
-# terraform-docs-cli Interface Design
+# tfdc Interface Design
 
 ## Goal
 Build a standalone CLI that retrieves Terraform documentation from public registry APIs, based on the behavior and data flow used in `hashicorp/terraform-mcp-server`.
@@ -24,7 +24,7 @@ Observed patterns in `terraform-mcp-server` that this CLI should preserve.
 ## Command Tree
 
 ```text
-terraform-docs-cli [global flags] <group> <command> [flags]
+tfdc [global flags] <group> <command> [flags]
 
 Groups:
   provider   Provider documentation and metadata
@@ -43,7 +43,7 @@ Groups:
 -insecure          Skip TLS verification
 -user-agent        Override User-Agent
 -debug             Debug log to stderr
--cache-dir         Cache directory       (default: ~/.cache/terraform-docs-cli)
+-cache-dir         Cache directory       (default: ~/.cache/tfdc)
 -cache-ttl         Cache TTL             (default: 24h)
 -no-cache          Disable cache
 ```
@@ -55,7 +55,7 @@ Groups:
 Search candidate provider docs and return `provider_doc_id` list.
 
 ```text
-terraform-docs-cli provider search \
+tfdc provider search \
   -name aws \
   -namespace hashicorp \
   -service ec2 \
@@ -91,7 +91,7 @@ Output fields.
 Fetch full provider doc content by exact `provider_doc_id`.
 
 ```text
-terraform-docs-cli provider get -doc-id 8894603
+tfdc provider get -doc-id 8894603
 ```
 
 Flags.
@@ -105,7 +105,7 @@ Flags.
 Convenience command: search and fetch in one call.
 
 ```text
-terraform-docs-cli provider doc \
+tfdc provider doc \
   -name aws -namespace hashicorp -service ec2 -type resources \
   [-version latest] [-select best]
 ```
@@ -125,13 +125,13 @@ Selection policy.
 ### `provider latest-version`
 
 ```text
-terraform-docs-cli provider latest-version -namespace hashicorp -name aws
+tfdc provider latest-version -namespace hashicorp -name aws
 ```
 
 ### `provider capabilities`
 
 ```text
-terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-version latest]
+tfdc provider capabilities -namespace hashicorp -name aws [-version latest]
 ```
 
 ### `provider export`
@@ -139,7 +139,7 @@ terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-versio
 Persist all docs of a specific provider version to a target directory.
 
 ```text
-terraform-docs-cli provider export \
+tfdc provider export \
   -namespace hashicorp \
   -name aws \
   -version 6.31.0 \
@@ -167,7 +167,7 @@ Export side effects.
 ### `module search`
 
 ```text
-terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
+tfdc module search -query vpc [-offset 0] [-limit 20]
 ```
 
 Output fields.
@@ -182,7 +182,7 @@ Output fields.
 ### `module get`
 
 ```text
-terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
+tfdc module get -id terraform-aws-modules/vpc/aws/6.0.1
 ```
 
 Validation.
@@ -192,7 +192,7 @@ Validation.
 ### `module latest-version`
 
 ```text
-terraform-docs-cli module latest-version \
+tfdc module latest-version \
   -publisher terraform-aws-modules \
   -name vpc \
   -provider aws
@@ -203,7 +203,7 @@ terraform-docs-cli module latest-version \
 ### `policy search`
 
 ```text
-terraform-docs-cli policy search -query cis
+tfdc policy search -query cis
 ```
 
 Output fields.
@@ -216,7 +216,7 @@ Output fields.
 ### `policy get`
 
 ```text
-terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
+tfdc policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
 ```
 
 ## Guide Commands
@@ -226,7 +226,7 @@ terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terr
 Fetch Terraform style guide markdown.
 
 ```text
-terraform-docs-cli guide style
+tfdc guide style
 ```
 
 ### `guide module-dev`
@@ -234,7 +234,7 @@ terraform-docs-cli guide style
 Fetch module development guide markdown.
 
 ```text
-terraform-docs-cli guide module-dev [-section all]
+tfdc guide module-dev [-section all]
 ```
 
 Flags.

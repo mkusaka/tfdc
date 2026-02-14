@@ -1,4 +1,4 @@
-# terraform-docs-cli
+# tfdc
 
 A Go CLI for exporting Terraform Registry documentation to local files with deterministic paths and persistent caching.
 
@@ -20,7 +20,7 @@ Planned in spec/interface docs (not implemented yet):
 Current command tree:
 
 ```text
-terraform-docs-cli [global flags] provider export [flags]
+tfdc [global flags] provider export [flags]
 ```
 
 ## Install
@@ -28,17 +28,17 @@ terraform-docs-cli [global flags] provider export [flags]
 Install with Go:
 
 ```bash
-go install github.com/mkusaka/terraform-docs-cli/cmd/terraform-docs-cli@latest
-terraform-docs-cli -help
+go install github.com/mkusaka/tfdc/cmd/tfdc@latest
+tfdc -help
 ```
 
 Build from source (for branch-specific changes):
 
 ```bash
-git clone https://github.com/mkusaka/terraform-docs-cli.git
-cd terraform-docs-cli
-go build -o bin/terraform-docs-cli ./cmd/terraform-docs-cli
-./bin/terraform-docs-cli -help
+git clone https://github.com/mkusaka/tfdc.git
+cd tfdc
+go build -o bin/tfdc ./cmd/tfdc
+./bin/tfdc -help
 ```
 
 ## Quick Start
@@ -46,7 +46,7 @@ go build -o bin/terraform-docs-cli ./cmd/terraform-docs-cli
 Run without installation:
 
 ```bash
-go run ./cmd/terraform-docs-cli \
+go run ./cmd/tfdc \
   provider export \
   -namespace hashicorp \
   -name aws \
@@ -59,14 +59,14 @@ go run ./cmd/terraform-docs-cli \
 Build binary:
 
 ```bash
-go build -o bin/terraform-docs-cli ./cmd/terraform-docs-cli
-./bin/terraform-docs-cli provider export -name aws -version 6.31.0 -out-dir ./dir
+go build -o bin/tfdc ./cmd/tfdc
+./bin/tfdc provider export -name aws -version 6.31.0 -out-dir ./dir
 ```
 
 Export from a lockfile:
 
 ```bash
-terraform-docs-cli -chdir=./infra provider export -out-dir ./docs
+tfdc -chdir=./infra provider export -out-dir ./docs
 ```
 
 ## `provider export`
@@ -132,13 +132,13 @@ dir/terraform/hashicorp/aws/6.31.0/docs/_manifest.json
 Export all providers from a lockfile:
 
 ```bash
-terraform-docs-cli -chdir=./infra/project1 provider export -out-dir ./docs
+tfdc -chdir=./infra/project1 provider export -out-dir ./docs
 ```
 
 Filter to a specific provider:
 
 ```bash
-terraform-docs-cli -chdir=./infra provider export -name aws -out-dir ./docs
+tfdc -chdir=./infra provider export -name aws -out-dir ./docs
 ```
 
 ### Lockfile path resolution
@@ -180,9 +180,9 @@ Rules:
 - `-retry` (default: `3`)
 - `-registry-url` (default: `https://registry.terraform.io`)
 - `-insecure` (skip TLS verification)
-- `-user-agent` (default: `terraform-docs-cli/dev`)
+- `-user-agent` (default: `tfdc/dev`)
 - `-debug`
-- `-cache-dir` (default: `~/.cache/terraform-docs-cli`)
+- `-cache-dir` (default: `~/.cache/tfdc`)
 - `-cache-ttl` (default: `24h`)
 - `-no-cache` (disable cache read/write)
 
@@ -193,7 +193,7 @@ Cache is enabled by default and stores HTTP GET responses on disk.
 Default structure:
 
 ```text
-~/.cache/terraform-docs-cli/
+~/.cache/tfdc/
   v1/
     meta.json
     entries/
@@ -234,7 +234,7 @@ golangci-lint run ./...
 
 CI (`.github/workflows/ci.yml`) runs:
 
-- `go build -v ./cmd/terraform-docs-cli`
+- `go build -v ./cmd/tfdc`
 - `go test -v -race ./...`
 - `golangci-lint` (binary install mode)
 
