@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mkusaka/terraform-docs-cli/internal/cache"
+	"github.com/mkusaka/tfdc/internal/cache"
 )
 
 type APIError struct {
@@ -85,7 +85,7 @@ func NewClient(cfg Config, cacheStore *cache.Store) (*Client, error) {
 
 	userAgent := cfg.UserAgent
 	if userAgent == "" {
-		userAgent = "terraform-docs-cli/dev"
+		userAgent = "tfdc/dev"
 	}
 
 	return &Client{

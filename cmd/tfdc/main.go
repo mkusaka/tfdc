@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/mkusaka/terraform-docs-cli/internal/cli"
+	"github.com/mkusaka/tfdc/internal/cli"
 )
 
 func main() {

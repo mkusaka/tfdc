@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mkusaka/terraform-docs-cli/internal/cache"
-	"github.com/mkusaka/terraform-docs-cli/internal/lockfile"
-	"github.com/mkusaka/terraform-docs-cli/internal/progress"
-	"github.com/mkusaka/terraform-docs-cli/internal/provider"
-	"github.com/mkusaka/terraform-docs-cli/internal/registry"
+	"github.com/mkusaka/tfdc/internal/cache"
+	"github.com/mkusaka/tfdc/internal/lockfile"
+	"github.com/mkusaka/tfdc/internal/progress"
+	"github.com/mkusaka/tfdc/internal/provider"
+	"github.com/mkusaka/tfdc/internal/registry"
 )
 
 type globalFlags struct {
@@ -83,7 +83,7 @@ func Execute(args []string, stderr io.Writer) int {
 
 func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	g := globalFlags{}
-	fs := flag.NewFlagSet("terraform-docs-cli", flag.ContinueOnError)
+	fs := flag.NewFlagSet("tfdc", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	fs.StringVar(&g.chdir, "chdir", "", "switch to a different working directory before executing")
@@ -91,9 +91,9 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	fs.IntVar(&g.retry, "retry", 3, "retry count")
 	fs.StringVar(&g.registryURL, "registry-url", "https://registry.terraform.io", "registry base URL")
 	fs.BoolVar(&g.insecure, "insecure", false, "skip TLS verification")
-	fs.StringVar(&g.userAgent, "user-agent", "terraform-docs-cli/dev", "custom User-Agent")
+	fs.StringVar(&g.userAgent, "user-agent", "tfdc/dev", "custom User-Agent")
 	fs.BoolVar(&g.debug, "debug", false, "enable debug log")
-	fs.StringVar(&g.cacheDir, "cache-dir", "~/.cache/terraform-docs-cli", "cache directory")
+	fs.StringVar(&g.cacheDir, "cache-dir", "~/.cache/tfdc", "cache directory")
 	fs.DurationVar(&g.cacheTTL, "cache-ttl", 24*time.Hour, "cache TTL")
 	fs.BoolVar(&g.noCache, "no-cache", false, "disable cache")
 
@@ -328,7 +328,7 @@ func mapErrorToExitCode(err error) int {
 }
 
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "usage: terraform-docs-cli [global flags] provider export [flags]")
+	_, _ = fmt.Fprintln(w, "usage: tfdc [global flags] provider export [flags]")
 }
 
 func expandHomeDir(path string) (string, error) {

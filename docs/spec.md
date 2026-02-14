@@ -1,8 +1,8 @@
-# terraform-docs-cli Specification
+# tfdc Specification
 
 ## 1. Purpose
 
-`terraform-docs-cli` is a command-line tool that retrieves Terraform documentation from Terraform Registry and official Terraform documentation sources for implementation and review workflows.
+`tfdc` is a command-line tool that retrieves Terraform documentation from Terraform Registry and official Terraform documentation sources for implementation and review workflows.
 
 This specification defines:
 
@@ -50,7 +50,7 @@ Align behavior with the registry-related tools in `hashicorp/terraform-mcp-serve
 ### 5.1 Command Tree
 
 ```text
-terraform-docs-cli [global flags] <group> <command> [flags]
+tfdc [global flags] <group> <command> [flags]
 
 group:
   provider
@@ -69,7 +69,7 @@ group:
 -insecure       Skip TLS verification
 -user-agent     Override User-Agent
 -debug          Enable debug logs
--cache-dir      Cache directory        (default: ~/.cache/terraform-docs-cli)
+-cache-dir      Cache directory        (default: ~/.cache/tfdc)
 -cache-ttl      Cache TTL              (default: 24h)
 -no-cache       Disable cache
 ```
@@ -83,7 +83,7 @@ group:
 Searches candidate provider docs and returns `provider_doc_id`.
 
 ```text
-terraform-docs-cli provider search \
+tfdc provider search \
   -name aws \
   -namespace hashicorp \
   -service ec2 \
@@ -117,7 +117,7 @@ Output fields:
 Fetches full content by `provider_doc_id`.
 
 ```text
-terraform-docs-cli provider get -doc-id 8894603
+tfdc provider get -doc-id 8894603
 ```
 
 Inputs:
@@ -134,7 +134,7 @@ Output:
 Convenience command that performs search and get in a single call.
 
 ```text
-terraform-docs-cli provider doc \
+tfdc provider doc \
   -name aws -namespace hashicorp -service ec2 -type resources \
   [-version latest] [-select best]
 ```
@@ -152,13 +152,13 @@ Selection rules:
 #### 6.1.4 `provider latest-version`
 
 ```text
-terraform-docs-cli provider latest-version -namespace hashicorp -name aws
+tfdc provider latest-version -namespace hashicorp -name aws
 ```
 
 #### 6.1.5 `provider capabilities`
 
 ```text
-terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-version latest]
+tfdc provider capabilities -namespace hashicorp -name aws [-version latest]
 ```
 
 #### 6.1.6 `provider export`
@@ -166,7 +166,7 @@ terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-versio
 Fetches all docs for a specific provider version and persists them under a target directory.
 
 ```text
-terraform-docs-cli provider export \
+tfdc provider export \
   -namespace hashicorp \
   -name aws \
   -version 6.31.0 \
@@ -204,7 +204,7 @@ Notes:
 #### 6.2.1 `module search`
 
 ```text
-terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
+tfdc module search -query vpc [-offset 0] [-limit 20]
 ```
 
 Output fields:
@@ -219,7 +219,7 @@ Output fields:
 #### 6.2.2 `module get`
 
 ```text
-terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
+tfdc module get -id terraform-aws-modules/vpc/aws/6.0.1
 ```
 
 Input constraints:
@@ -229,7 +229,7 @@ Input constraints:
 #### 6.2.3 `module latest-version`
 
 ```text
-terraform-docs-cli module latest-version \
+tfdc module latest-version \
   -publisher terraform-aws-modules \
   -name vpc \
   -provider aws
@@ -240,7 +240,7 @@ terraform-docs-cli module latest-version \
 #### 6.3.1 `policy search`
 
 ```text
-terraform-docs-cli policy search -query cis
+tfdc policy search -query cis
 ```
 
 Output fields:
@@ -253,7 +253,7 @@ Output fields:
 #### 6.3.2 `policy get`
 
 ```text
-terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
+tfdc policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
 ```
 
 ### 6.4 Guide
@@ -261,13 +261,13 @@ terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terr
 #### 6.4.1 `guide style`
 
 ```text
-terraform-docs-cli guide style
+tfdc guide style
 ```
 
 #### 6.4.2 `guide module-dev`
 
 ```text
-terraform-docs-cli guide module-dev [-section all]
+tfdc guide module-dev [-section all]
 ```
 
 `-section`:
@@ -342,7 +342,7 @@ terraform-docs-cli guide module-dev [-section all]
 ### 10.1 Package Layout (proposed)
 
 ```text
-cmd/terraform-docs-cli/
+cmd/tfdc/
 internal/cli/           # cobra command definitions
 internal/client/        # HTTP client, retry, TLS
 internal/registry/      # provider/module/policy API calls
@@ -353,7 +353,7 @@ internal/output/        # stdout/file writer
 ### 10.2 HTTP Client
 
 - Inject timeout/retry/insecure from global flags
-- User-Agent should be `terraform-docs-cli/<version>`
+- User-Agent should be `tfdc/<version>`
 
 ### 10.3 Validation
 
