@@ -47,7 +47,6 @@ Run without installation:
 
 ```bash
 go run ./cmd/terraform-docs-cli \
-  -output json \
   provider export \
   -namespace hashicorp \
   -name aws \
@@ -88,7 +87,7 @@ Required flags:
 
 Required flags:
 
-- `-lockfile` or `-chdir`
+- `-chdir` (global flag)
 - `-out-dir`
 
 Optional flags (both modes):
@@ -98,7 +97,6 @@ Optional flags (both modes):
 - `-categories` (default: `all`)
 - `-path-template` (default below)
 - `-clean` (remove previous export outputs for the same target before writing)
-- `-lockfile` (path to `.terraform.lock.hcl`)
 
 Default template:
 
@@ -134,12 +132,6 @@ dir/terraform/hashicorp/aws/6.31.0/docs/_manifest.json
 Export all providers from a lockfile:
 
 ```bash
-terraform-docs-cli provider export -lockfile .terraform.lock.hcl -out-dir ./docs
-```
-
-Auto-detect lockfile via `-chdir`:
-
-```bash
 terraform-docs-cli -chdir=./infra/project1 provider export -out-dir ./docs
 ```
 
@@ -151,12 +143,11 @@ terraform-docs-cli -chdir=./infra provider export -name aws -out-dir ./docs
 
 ### Lockfile path resolution
 
-1. Explicit `-lockfile` takes precedence.
-2. If omitted but `-chdir` is set, looks for `{chdir}/.terraform.lock.hcl`.
-3. If neither is set, falls back to legacy mode (`-name` and `-version` required).
+- When `-chdir` is set, looks for `{chdir}/.terraform.lock.hcl`.
+- If `-chdir` is not set, falls back to legacy mode (`-name` and `-version` required).
 
 Notes:
-- `-version` is ignored (with a warning) when using `-lockfile` or `-chdir`.
+- `-version` is ignored (with a warning) when using `-chdir`.
 - `-name` can be used to filter a single provider from the lockfile.
 
 ## Path Template Placeholders
@@ -185,8 +176,6 @@ Rules:
 ## Global Flags
 
 - `-chdir` (switch to a different working directory; auto-detects `.terraform.lock.hcl`)
-- `-output, -o` (`text|json|markdown`, default: `text`)
-- `-write` (write summary output to file instead of stdout)
 - `-timeout` (default: `10s`)
 - `-retry` (default: `3`)
 - `-registry-url` (default: `https://registry.terraform.io`)

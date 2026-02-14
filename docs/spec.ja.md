@@ -62,8 +62,7 @@ group:
 ### 5.2 グローバルフラグ
 
 ```text
--output, -o     text|json|markdown   (default: text)
--write          出力ファイルパス      (default: stdout)
+-chdir          作業ディレクトリ変更 (.terraform.lock.hcl自動検出)
 -timeout        HTTPタイムアウト      (default: 10s)
 -retry          リトライ回数          (default: 3)
 -registry-url   RegistryベースURL     (default: https://registry.terraform.io)
@@ -262,7 +261,7 @@ terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terr
 #### 6.4.1 `guide style`
 
 ```text
-terraform-docs-cli guide style [-output markdown]
+terraform-docs-cli guide style
 ```
 
 #### 6.4.2 `guide module-dev`
@@ -370,8 +369,7 @@ internal/output/        # stdout/file writer
   - `module search|get`
   - `policy search|get`
   - `guide style|module-dev`
-- キャッシュキーは「HTTPメソッド + 正規化済みURL + 主要クエリ + 出力非依存データ」で構成する
-- `-output` は表示のみのためキャッシュキーには含めない
+- キャッシュキーは「HTTPメソッド + 正規化済みURL + 主要クエリ」で構成する
 - TTL を超過したエントリはミスとして再取得し、取得成功後に上書きする
 - `-no-cache` 指定時は read/write ともに無効化する
 - キャッシュ破損時は当該エントリを破棄して再取得し、処理は継続する

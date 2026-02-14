@@ -52,20 +52,18 @@ func TestParseGlobalFlags_RejectsTildeUserCacheDirWhenCacheEnabled(t *testing.T)
 }
 
 func TestExecute_UnknownProviderExportFlagReturnsExitCode1(t *testing.T) {
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 
 	code := Execute([]string{
 		"provider", "export",
 		"-unknown",
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
 	}
 }
 
 func TestExecute_ProviderExportExtraArgsReturnsExitCode1(t *testing.T) {
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 
 	code := Execute([]string{
@@ -74,7 +72,7 @@ func TestExecute_ProviderExportExtraArgsReturnsExitCode1(t *testing.T) {
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
 		"extra",
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -84,7 +82,6 @@ func TestExecute_ProviderExportExtraArgsReturnsExitCode1(t *testing.T) {
 }
 
 func TestExecute_InvalidRegistryURLReturnsExitCode1(t *testing.T) {
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
 		"-registry-url", "://bad-url",
@@ -92,14 +89,13 @@ func TestExecute_InvalidRegistryURLReturnsExitCode1(t *testing.T) {
 		"-name", "aws",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
 }
 
 func TestExecute_UnsupportedRegistryURLSchemeReturnsExitCode1(t *testing.T) {
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
 		"-registry-url", "ftp://registry.terraform.io",
@@ -107,7 +103,7 @@ func TestExecute_UnsupportedRegistryURLSchemeReturnsExitCode1(t *testing.T) {
 		"-name", "aws",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -119,7 +115,6 @@ func TestExecute_CacheInitFailureReturnsExitCode4(t *testing.T) {
 		t.Fatalf("failed to prepare cache file: %v", err)
 	}
 
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
 		"-cache-dir", cacheFile,
@@ -127,7 +122,7 @@ func TestExecute_CacheInitFailureReturnsExitCode4(t *testing.T) {
 		"-name", "aws",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 4 {
 		t.Fatalf("expected exit code 4, got %d; stderr=%s", code, errOut.String())
 	}
@@ -142,14 +137,13 @@ func TestExecute_ValidationPrecedesCacheInit(t *testing.T) {
 		t.Fatalf("failed to prepare cache file: %v", err)
 	}
 
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
 		"-cache-dir", cacheFile,
 		"provider", "export",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -176,36 +170,28 @@ func TestParseGlobalFlags_ChdirIsParsed(t *testing.T) {
 	}
 }
 
-func TestResolveLockfilePath_ExplicitLockfile(t *testing.T) {
-	got := resolveLockfilePath("/explicit/path.hcl", "/some/chdir")
-	if got != "/explicit/path.hcl" {
-		t.Fatalf("expected explicit path, got %q", got)
-	}
-}
-
 func TestResolveLockfilePath_ChdirAutoDetect(t *testing.T) {
-	got := resolveLockfilePath("", "/my/project")
+	got := resolveLockfilePath("/my/project")
 	want := filepath.Join("/my/project", ".terraform.lock.hcl")
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
 
-func TestResolveLockfilePath_NeitherSpecified(t *testing.T) {
-	got := resolveLockfilePath("", "")
+func TestResolveLockfilePath_NoChdirReturnsEmpty(t *testing.T) {
+	got := resolveLockfilePath("")
 	if got != "" {
 		t.Fatalf("expected empty string, got %q", got)
 	}
 }
 
 func TestExecute_LockfileNotFoundReturnsError(t *testing.T) {
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
+		"-chdir", "/nonexistent",
 		"provider", "export",
-		"-lockfile", "/nonexistent/.terraform.lock.hcl",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit code for missing lockfile")
 	}
@@ -225,7 +211,6 @@ provider "registry.terraform.io/hashicorp/null" {
 		t.Fatalf("failed to write lockfile: %v", err)
 	}
 
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	// This will fail at the registry call (no real server), but it should get past
 	// lockfile parsing and validation. We verify that lockfile was found.
@@ -233,7 +218,7 @@ provider "registry.terraform.io/hashicorp/null" {
 		"-chdir", projDir,
 		"provider", "export",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	// Exit code should NOT be 1 (validation error) - it should be a network/registry error (code 3).
 	// If lockfile wasn't found, we'd get a validation error about -name being required.
 	if code == 1 && strings.Contains(errOut.String(), "-name is required") {
@@ -242,24 +227,23 @@ provider "registry.terraform.io/hashicorp/null" {
 }
 
 func TestExecute_LockfileWithNameFilter_NotFound(t *testing.T) {
+	projDir := t.TempDir()
 	lockContent := `
 provider "registry.terraform.io/hashicorp/aws" {
   version = "5.31.0"
 }
 `
-	lockPath := filepath.Join(t.TempDir(), ".terraform.lock.hcl")
-	if err := os.WriteFile(lockPath, []byte(lockContent), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projDir, ".terraform.lock.hcl"), []byte(lockContent), 0o644); err != nil {
 		t.Fatalf("failed to write lockfile: %v", err)
 	}
 
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
+		"-chdir", projDir,
 		"provider", "export",
-		"-lockfile", lockPath,
 		"-name", "nonexistent",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 2 {
 		t.Fatalf("expected exit code 2 (not found), got %d; stderr=%s", code, errOut.String())
 	}
@@ -268,44 +252,42 @@ provider "registry.terraform.io/hashicorp/aws" {
 	}
 }
 
-func TestExecute_LockfileVersionWarning(t *testing.T) {
+func TestExecute_ChdirVersionWarning(t *testing.T) {
+	projDir := t.TempDir()
 	lockContent := `
 provider "registry.terraform.io/hashicorp/null" {
   version = "3.2.0"
 }
 `
-	lockPath := filepath.Join(t.TempDir(), ".terraform.lock.hcl")
-	if err := os.WriteFile(lockPath, []byte(lockContent), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projDir, ".terraform.lock.hcl"), []byte(lockContent), 0o644); err != nil {
 		t.Fatalf("failed to write lockfile: %v", err)
 	}
 
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	// Will fail at registry call, but we check for the warning in stderr.
 	_ = Execute([]string{
+		"-chdir", projDir,
 		"provider", "export",
-		"-lockfile", lockPath,
 		"-version", "ignored",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if !strings.Contains(errOut.String(), "-version is ignored") {
 		t.Fatalf("expected -version warning, got stderr: %s", errOut.String())
 	}
 }
 
 func TestExecute_LockfileEmptyReturnsError(t *testing.T) {
-	lockPath := filepath.Join(t.TempDir(), ".terraform.lock.hcl")
-	if err := os.WriteFile(lockPath, []byte(""), 0o644); err != nil {
+	projDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projDir, ".terraform.lock.hcl"), []byte(""), 0o644); err != nil {
 		t.Fatalf("failed to write lockfile: %v", err)
 	}
 
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
+		"-chdir", projDir,
 		"provider", "export",
-		"-lockfile", lockPath,
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d; stderr=%s", code, errOut.String())
 	}
@@ -315,13 +297,12 @@ func TestExecute_LockfileEmptyReturnsError(t *testing.T) {
 }
 
 func TestExecute_LegacyModeStillRequiresName(t *testing.T) {
-	var out bytes.Buffer
 	var errOut bytes.Buffer
 	code := Execute([]string{
 		"provider", "export",
 		"-version", "5.31.0",
 		"-out-dir", t.TempDir(),
-	}, &out, &errOut)
+	}, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}

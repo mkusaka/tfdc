@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,8 +20,6 @@ import (
 
 type globalFlags struct {
 	chdir       string
-	output      string
-	write       string
 	timeout     time.Duration
 	retry       int
 	registryURL string
@@ -45,7 +42,7 @@ func (e *CacheInitError) Error() string {
 
 func (e *CacheInitError) Unwrap() error { return e.Err }
 
-func Execute(args []string, stdout io.Writer, stderr io.Writer) int {
+func Execute(args []string, stderr io.Writer) int {
 	g, rest, err := parseGlobalFlags(args)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -71,10 +68,7 @@ func Execute(args []string, stdout io.Writer, stderr io.Writer) int {
 				_, _ = fmt.Fprintln(stderr, runErr)
 				return code
 			}
-			if err := writeSummaries(g, summaries, stdout); err != nil {
-				_, _ = fmt.Fprintln(stderr, err)
-				return 4
-			}
+			printSummaries(summaries, stderr)
 			return 0
 		default:
 			_, _ = fmt.Fprintf(stderr, "unsupported provider command: %s\n", cmd)
@@ -93,9 +87,6 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	fs.SetOutput(io.Discard)
 
 	fs.StringVar(&g.chdir, "chdir", "", "switch to a different working directory before executing")
-	fs.StringVar(&g.output, "output", "text", "output format: text|json|markdown")
-	fs.StringVar(&g.output, "o", "text", "output format: text|json|markdown")
-	fs.StringVar(&g.write, "write", "", "write output to file path")
 	fs.DurationVar(&g.timeout, "timeout", 10*time.Second, "HTTP timeout")
 	fs.IntVar(&g.retry, "retry", 3, "retry count")
 	fs.StringVar(&g.registryURL, "registry-url", "https://registry.terraform.io", "registry base URL")
@@ -108,11 +99,6 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 
 	if err := fs.Parse(args); err != nil {
 		return g, nil, err
-	}
-
-	g.output = strings.ToLower(strings.TrimSpace(g.output))
-	if g.output != "text" && g.output != "json" && g.output != "markdown" {
-		return g, nil, fmt.Errorf("unsupported -output: %s", g.output)
 	}
 
 	if g.retry < 0 {
@@ -145,7 +131,6 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 	var categories string
 	var pathTemplate string
 	var clean bool
-	var lockfilePath string
 
 	fs := flag.NewFlagSet("provider export", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -157,7 +142,6 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 	fs.StringVar(&categories, "categories", "all", "categories list or all")
 	fs.StringVar(&pathTemplate, "path-template", provider.DefaultPathTemplate, "output path template")
 	fs.BoolVar(&clean, "clean", false, "remove existing provider/version subtree before export")
-	fs.StringVar(&lockfilePath, "lockfile", "", "path to .terraform.lock.hcl")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, &provider.ValidationError{Message: err.Error()}
@@ -166,8 +150,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 		return nil, &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
 	}
 
-	// Resolve lockfile path: explicit -lockfile takes precedence over -chdir auto-detection.
-	resolvedLockfile := resolveLockfilePath(lockfilePath, g.chdir)
+	resolvedLockfile := resolveLockfilePath(g.chdir)
 
 	spinner := progress.New(stderr)
 	defer spinner.Stop()
@@ -212,10 +195,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 	return []provider.ExportSummary{*summary}, nil
 }
 
-func resolveLockfilePath(explicit, chdir string) string {
-	if strings.TrimSpace(explicit) != "" {
-		return explicit
-	}
+func resolveLockfilePath(chdir string) string {
 	if strings.TrimSpace(chdir) != "" {
 		return filepath.Join(chdir, ".terraform.lock.hcl")
 	}
@@ -224,7 +204,7 @@ func resolveLockfilePath(explicit, chdir string) string {
 
 func runLockfileExport(ctx context.Context, g globalFlags, lockfilePath, nameFilter, versionFlag string, stderr io.Writer, spinner *progress.Spinner, baseOpts provider.ExportOptions) ([]provider.ExportSummary, error) {
 	if strings.TrimSpace(versionFlag) != "" {
-		_, _ = fmt.Fprintln(stderr, "warning: -version is ignored when using -lockfile or -chdir")
+		_, _ = fmt.Fprintln(stderr, "warning: -version is ignored when using -chdir")
 	}
 
 	locks, err := lockfile.ParseFile(lockfilePath)
@@ -304,81 +284,10 @@ func buildRegistryClient(g globalFlags) (*registry.Client, error) {
 	}, cacheStore)
 }
 
-func writeSummaries(g globalFlags, summaries []provider.ExportSummary, stdout io.Writer) error {
-	if len(summaries) == 1 {
-		return writeSummary(g, &summaries[0], stdout)
+func printSummaries(summaries []provider.ExportSummary, w io.Writer) {
+	for _, s := range summaries {
+		fmt.Fprintf(w, "exported %d docs for %s@%s\nmanifest: %s\n", s.Written, s.Provider, s.Version, s.Manifest)
 	}
-
-	var b []byte
-	var err error
-
-	switch g.output {
-	case "json":
-		b, err = json.MarshalIndent(summaries, "", "  ")
-		if err == nil {
-			b = append(b, '\n')
-		}
-	case "markdown":
-		var buf strings.Builder
-		for i, s := range summaries {
-			if i > 0 {
-				buf.WriteString("\n")
-			}
-			fmt.Fprintf(&buf, "## %s\n\n", s.Provider)
-			fmt.Fprintf(&buf, "- provider: `%s`\n- version: `%s`\n- written: `%d`\n- manifest: `%s`\n", s.Provider, s.Version, s.Written, s.Manifest)
-		}
-		b = []byte(buf.String())
-	default:
-		var buf strings.Builder
-		for i, s := range summaries {
-			if i > 0 {
-				buf.WriteString("\n")
-			}
-			fmt.Fprintf(&buf, "exported %d docs for %s@%s\nmanifest: %s\n", s.Written, s.Provider, s.Version, s.Manifest)
-		}
-		b = []byte(buf.String())
-	}
-	if err != nil {
-		return err
-	}
-
-	if strings.TrimSpace(g.write) != "" {
-		if err := os.MkdirAll(filepath.Dir(g.write), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(g.write, b, 0o644)
-	}
-	_, err = stdout.Write(b)
-	return err
-}
-
-func writeSummary(g globalFlags, summary *provider.ExportSummary, stdout io.Writer) error {
-	var b []byte
-	var err error
-
-	switch g.output {
-	case "json":
-		b, err = json.MarshalIndent(summary, "", "  ")
-		if err == nil {
-			b = append(b, '\n')
-		}
-	case "markdown":
-		b = []byte(fmt.Sprintf("- provider: `%s`\n- version: `%s`\n- written: `%d`\n- manifest: `%s`\n", summary.Provider, summary.Version, summary.Written, summary.Manifest))
-	default:
-		b = []byte(fmt.Sprintf("exported %d docs for %s@%s\nmanifest: %s\n", summary.Written, summary.Provider, summary.Version, summary.Manifest))
-	}
-	if err != nil {
-		return err
-	}
-
-	if strings.TrimSpace(g.write) != "" {
-		if err := os.MkdirAll(filepath.Dir(g.write), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(g.write, b, 0o644)
-	}
-	_, err = stdout.Write(b)
-	return err
 }
 
 func mapErrorToExitCode(err error) int {
