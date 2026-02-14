@@ -29,7 +29,7 @@ Install with Go:
 
 ```bash
 go install github.com/mkusaka/terraform-docs-cli/cmd/terraform-docs-cli@latest
-terraform-docs-cli --help
+terraform-docs-cli -help
 ```
 
 Build from source (for branch-specific changes):
@@ -38,7 +38,7 @@ Build from source (for branch-specific changes):
 git clone https://github.com/mkusaka/terraform-docs-cli.git
 cd terraform-docs-cli
 go build -o bin/terraform-docs-cli ./cmd/terraform-docs-cli
-./bin/terraform-docs-cli --help
+./bin/terraform-docs-cli -help
 ```
 
 ## Quick Start
@@ -47,21 +47,21 @@ Run without installation:
 
 ```bash
 go run ./cmd/terraform-docs-cli \
-  --output json \
+  -output json \
   provider export \
-  --namespace hashicorp \
-  --name aws \
-  --version 6.31.0 \
-  --format markdown \
-  --out-dir ./dir \
-  --categories guides,resources
+  -namespace hashicorp \
+  -name aws \
+  -version 6.31.0 \
+  -format markdown \
+  -out-dir ./dir \
+  -categories guides,resources
 ```
 
 Build binary:
 
 ```bash
 go build -o bin/terraform-docs-cli ./cmd/terraform-docs-cli
-./bin/terraform-docs-cli provider export --name aws --version 6.31.0 --out-dir ./dir
+./bin/terraform-docs-cli provider export -name aws -version 6.31.0 -out-dir ./dir
 ```
 
 ## `provider export`
@@ -70,17 +70,17 @@ Fetches all docs for a specific provider version (filtered by categories), write
 
 Required flags:
 
-- `--name`
-- `--version`
-- `--out-dir`
+- `-name`
+- `-version`
+- `-out-dir`
 
 Optional flags:
 
-- `--namespace` (default: `hashicorp`)
-- `--format` (`markdown|json`, default: `markdown`)
-- `--categories` (default: `all`)
-- `--path-template` (default below)
-- `--clean` (remove previous export outputs for the same target before writing)
+- `-namespace` (default: `hashicorp`)
+- `-format` (`markdown|json`, default: `markdown`)
+- `-categories` (default: `all`)
+- `-path-template` (default below)
+- `-clean` (remove previous export outputs for the same target before writing)
 
 Default template:
 
@@ -100,7 +100,7 @@ Manifest path:
 dir/terraform/hashicorp/aws/6.31.0/docs/_manifest.json
 ```
 
-`--categories all` expands to:
+`-categories all` expands to:
 
 - `resources`
 - `data-sources`
@@ -128,25 +128,25 @@ Rules:
 
 - Unknown placeholders are rejected.
 - Malformed placeholder syntax (`{` / `}` mismatch) is rejected.
-- Resolved paths must remain inside `--out-dir`.
+- Resolved paths must remain inside `-out-dir`.
 - Path collisions are rejected (including collision with reserved manifest path).
-- Safety checks reject symlink traversal outside `--out-dir` for both write and `--clean` deletion paths.
-- `--clean` removes the existing manifest file for that provider version before rewriting.
-- `--clean` removes a template root directory only when the derived root is scoped by namespace/provider/version path segments.
+- Safety checks reject symlink traversal outside `-out-dir` for both write and `-clean` deletion paths.
+- `-clean` removes the existing manifest file for that provider version before rewriting.
+- `-clean` removes a template root directory only when the derived root is scoped by namespace/provider/version path segments.
 
 ## Global Flags
 
-- `--output, -o` (`text|json|markdown`, default: `text`)
-- `--write` (write summary output to file instead of stdout)
-- `--timeout` (default: `10s`)
-- `--retry` (default: `3`)
-- `--registry-url` (default: `https://registry.terraform.io`)
-- `--insecure` (skip TLS verification)
-- `--user-agent` (default: `terraform-docs-cli/dev`)
-- `--debug`
-- `--cache-dir` (default: `~/.cache/terraform-docs-cli`)
-- `--cache-ttl` (default: `24h`)
-- `--no-cache` (disable cache read/write)
+- `-output, -o` (`text|json|markdown`, default: `text`)
+- `-write` (write summary output to file instead of stdout)
+- `-timeout` (default: `10s`)
+- `-retry` (default: `3`)
+- `-registry-url` (default: `https://registry.terraform.io`)
+- `-insecure` (skip TLS verification)
+- `-user-agent` (default: `terraform-docs-cli/dev`)
+- `-debug`
+- `-cache-dir` (default: `~/.cache/terraform-docs-cli`)
+- `-cache-ttl` (default: `24h`)
+- `-no-cache` (disable cache read/write)
 
 ## Persistent Cache
 
@@ -170,7 +170,7 @@ Notes:
 - Cache key: `METHOD + URL` hash.
 - TTL expiry is treated as cache miss.
 - Corrupted entries are discarded and refetched.
-- `--no-cache` disables both cache read and write.
+- `-no-cache` disables both cache read and write.
 
 ## Exit Codes
 

@@ -678,7 +678,7 @@ func TestExportDocs_CleanRemovesExistingSubtree(t *testing.T) {
 	}
 
 	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
-		t.Fatalf("expected stale file to be removed by --clean")
+		t.Fatalf("expected stale file to be removed by -clean")
 	}
 }
 
@@ -738,7 +738,7 @@ func TestExportDocs_CleanWithBracesInOutDir(t *testing.T) {
 	}
 
 	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
-		t.Fatalf("expected stale file to be removed by --clean")
+		t.Fatalf("expected stale file to be removed by -clean")
 	}
 
 	guidePath := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "guides", "tag-policy-compliance.md")
@@ -773,7 +773,7 @@ func TestExportDocs_CleanUsesScopedPathTemplateRoot(t *testing.T) {
 	}
 
 	if _, err := os.Stat(staleCustom); !os.IsNotExist(err) {
-		t.Fatalf("expected stale custom file to be removed by --clean with scoped custom template")
+		t.Fatalf("expected stale custom file to be removed by -clean with scoped custom template")
 	}
 
 	newGuide := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0", "guides", "tag-policy-compliance.md")
@@ -808,7 +808,7 @@ func TestExportDocs_CleanUsesRelativePathTemplateRoot(t *testing.T) {
 	}
 
 	if _, err := os.Stat(staleCustom); !os.IsNotExist(err) {
-		t.Fatalf("expected stale custom file to be removed by --clean with relative scoped template")
+		t.Fatalf("expected stale custom file to be removed by -clean with relative scoped template")
 	}
 
 	newGuide := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0", "guides", "tag-policy-compliance.md")
@@ -989,7 +989,7 @@ func TestExportDocs_CleanRejectsSymlinkedTargetOutsideOutDir(t *testing.T) {
 	if !errors.As(err, &vErr) {
 		t.Fatalf("expected validation error, got %T (%v)", err, err)
 	}
-	if !strings.Contains(vErr.Error(), "unsafe --clean target") && !strings.Contains(vErr.Error(), "unsafe manifest path") {
+	if !strings.Contains(vErr.Error(), "unsafe -clean target") && !strings.Contains(vErr.Error(), "unsafe manifest path") {
 		t.Fatalf("unexpected error message: %s", vErr.Error())
 	}
 
@@ -1186,7 +1186,7 @@ func TestExportDocs_PathTemplateOutsideOutDirFailsWhenNoDocsFound(t *testing.T) 
 	if !errors.As(err, &vErr) {
 		t.Fatalf("expected validation error, got %T (%v)", err, err)
 	}
-	if !strings.Contains(vErr.Error(), "outside --out-dir") {
+	if !strings.Contains(vErr.Error(), "outside -out-dir") {
 		t.Fatalf("unexpected error message: %s", vErr.Error())
 	}
 }

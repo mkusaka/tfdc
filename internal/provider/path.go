@@ -33,10 +33,10 @@ func BuildOutputPath(template string, vars map[string]string, outDir string) (st
 	}
 
 	if !isPathWithinDir(outAbs, pathAbs) {
-		return "", fmt.Errorf("output path is outside --out-dir: %s", pathAbs)
+		return "", fmt.Errorf("output path is outside -out-dir: %s", pathAbs)
 	}
 	if err := ensureNoSymlinkTraversal(outAbs, pathAbs); err != nil {
-		return "", fmt.Errorf("output path crosses symlink outside --out-dir: %v", err)
+		return "", fmt.Errorf("output path crosses symlink outside -out-dir: %v", err)
 	}
 
 	return pathAbs, nil

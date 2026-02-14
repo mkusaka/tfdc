@@ -112,23 +112,23 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 
 	g.output = strings.ToLower(strings.TrimSpace(g.output))
 	if g.output != "text" && g.output != "json" && g.output != "markdown" {
-		return g, nil, fmt.Errorf("unsupported --output: %s", g.output)
+		return g, nil, fmt.Errorf("unsupported -output: %s", g.output)
 	}
 
 	if g.retry < 0 {
-		return g, nil, fmt.Errorf("--retry must be >= 0")
+		return g, nil, fmt.Errorf("-retry must be >= 0")
 	}
 
 	if !g.noCache {
 		if g.cacheTTL <= 0 {
-			return g, nil, fmt.Errorf("--cache-ttl must be positive")
+			return g, nil, fmt.Errorf("-cache-ttl must be positive")
 		}
 		expanded, err := expandHomeDir(g.cacheDir)
 		if err != nil {
 			return g, nil, err
 		}
 		if strings.TrimSpace(expanded) == "" {
-			return g, nil, fmt.Errorf("--cache-dir must not be empty")
+			return g, nil, fmt.Errorf("-cache-dir must not be empty")
 		}
 		g.cacheDir = expanded
 	}
@@ -166,7 +166,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 		return nil, &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
 	}
 
-	// Resolve lockfile path: explicit --lockfile takes precedence over -chdir auto-detection.
+	// Resolve lockfile path: explicit -lockfile takes precedence over -chdir auto-detection.
 	resolvedLockfile := resolveLockfilePath(lockfilePath, g.chdir)
 
 	spinner := progress.New(stderr)
@@ -182,7 +182,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 		})
 	}
 
-	// Legacy mode: --name and --version required.
+	// Legacy mode: -name and -version required.
 	opts := provider.ExportOptions{
 		Namespace:    namespace,
 		Name:         name,
@@ -224,7 +224,7 @@ func resolveLockfilePath(explicit, chdir string) string {
 
 func runLockfileExport(ctx context.Context, g globalFlags, lockfilePath, nameFilter, versionFlag string, stderr io.Writer, spinner *progress.Spinner, baseOpts provider.ExportOptions) ([]provider.ExportSummary, error) {
 	if strings.TrimSpace(versionFlag) != "" {
-		_, _ = fmt.Fprintln(stderr, "warning: --version is ignored when using --lockfile or -chdir")
+		_, _ = fmt.Fprintln(stderr, "warning: -version is ignored when using -lockfile or -chdir")
 	}
 
 	locks, err := lockfile.ParseFile(lockfilePath)

@@ -62,17 +62,17 @@ group:
 ### 5.2 Global Flags
 
 ```text
---output, -o     text|json|markdown   (default: text)
---write          Output file path      (default: stdout)
---timeout        HTTP timeout          (default: 10s)
---retry          Retry count           (default: 3)
---registry-url   Registry base URL     (default: https://registry.terraform.io)
---insecure       Skip TLS verification
---user-agent     Override User-Agent
---debug          Enable debug logs
---cache-dir      Cache directory        (default: ~/.cache/terraform-docs-cli)
---cache-ttl      Cache TTL              (default: 24h)
---no-cache       Disable cache
+-output, -o     text|json|markdown   (default: text)
+-write          Output file path      (default: stdout)
+-timeout        HTTP timeout          (default: 10s)
+-retry          Retry count           (default: 3)
+-registry-url   Registry base URL     (default: https://registry.terraform.io)
+-insecure       Skip TLS verification
+-user-agent     Override User-Agent
+-debug          Enable debug logs
+-cache-dir      Cache directory        (default: ~/.cache/terraform-docs-cli)
+-cache-ttl      Cache TTL              (default: 24h)
+-no-cache       Disable cache
 ```
 
 ## 6. Command Details
@@ -85,23 +85,23 @@ Searches candidate provider docs and returns `provider_doc_id`.
 
 ```text
 terraform-docs-cli provider search \
-  --name aws \
-  --namespace hashicorp \
-  --service ec2 \
-  --type resources \
-  [--version latest] \
-  [--limit 20]
+  -name aws \
+  -namespace hashicorp \
+  -service ec2 \
+  -type resources \
+  [-version latest] \
+  [-limit 20]
 ```
 
 Inputs:
 
-- `--name` required
-- `--namespace` default `hashicorp`
-- `--service` required
-- `--type` required  
+- `-name` required
+- `-namespace` default `hashicorp`
+- `-service` required
+- `-type` required
   `resources|data-sources|ephemeral-resources|functions|guides|overview|actions|list-resources`
-- `--version` default `latest`
-- `--limit` default `20`
+- `-version` default `latest`
+- `-limit` default `20`
 
 Output fields:
 
@@ -118,12 +118,12 @@ Output fields:
 Fetches full content by `provider_doc_id`.
 
 ```text
-terraform-docs-cli provider get --doc-id 8894603
+terraform-docs-cli provider get -doc-id 8894603
 ```
 
 Inputs:
 
-- `--doc-id` required (numeric)
+- `-doc-id` required (numeric)
 
 Output:
 
@@ -136,13 +136,13 @@ Convenience command that performs search and get in a single call.
 
 ```text
 terraform-docs-cli provider doc \
-  --name aws --namespace hashicorp --service ec2 --type resources \
-  [--version latest] [--select best]
+  -name aws -namespace hashicorp -service ec2 -type resources \
+  [-version latest] [-select best]
 ```
 
 Inputs:
 
-- `--select`: `best|first|interactive` (default: `best`)
+- `-select`: `best|first|interactive` (default: `best`)
 
 Selection rules:
 
@@ -153,13 +153,13 @@ Selection rules:
 #### 6.1.4 `provider latest-version`
 
 ```text
-terraform-docs-cli provider latest-version --namespace hashicorp --name aws
+terraform-docs-cli provider latest-version -namespace hashicorp -name aws
 ```
 
 #### 6.1.5 `provider capabilities`
 
 ```text
-terraform-docs-cli provider capabilities --namespace hashicorp --name aws [--version latest]
+terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-version latest]
 ```
 
 #### 6.1.6 `provider export`
@@ -168,26 +168,26 @@ Fetches all docs for a specific provider version and persists them under a targe
 
 ```text
 terraform-docs-cli provider export \
-  --namespace hashicorp \
-  --name aws \
-  --version 6.31.0 \
-  --format markdown \
-  --out-dir ./dir \
-  [--categories all] \
-  [--path-template "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"] \
-  [--clean]
+  -namespace hashicorp \
+  -name aws \
+  -version 6.31.0 \
+  -format markdown \
+  -out-dir ./dir \
+  [-categories all] \
+  [-path-template "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"] \
+  [-clean]
 ```
 
 Inputs:
 
-- `--namespace` default `hashicorp`
-- `--name` required
-- `--version` required (explicit)
-- `--format` `markdown|json` (default: `markdown`)
-- `--out-dir` required
-- `--categories` default `all` (`resources,data-sources,ephemeral-resources,functions,guides,overview,actions,list-resources`)
-- `--path-template` optional; uses default layout if omitted
-- `--clean` removes the existing manifest file, and additionally removes a derived template root only when it is namespace/provider/version-scoped
+- `-namespace` default `hashicorp`
+- `-name` required
+- `-version` required (explicit)
+- `-format` `markdown|json` (default: `markdown`)
+- `-out-dir` required
+- `-categories` default `all` (`resources,data-sources,ephemeral-resources,functions,guides,overview,actions,list-resources`)
+- `-path-template` optional; uses default layout if omitted
+- `-clean` removes the existing manifest file, and additionally removes a derived template root only when it is namespace/provider/version-scoped
 
 Default persistence path:
 
@@ -197,7 +197,7 @@ Default persistence path:
 Notes:
 
 - `{ext}` is `md` for markdown and `json` for json format
-- Writes namespace-scoped `_manifest.json` under the manifest root  
+- Writes namespace-scoped `_manifest.json` under the manifest root
   (`{out}/terraform/{namespace}/{provider}/{version}/docs/_manifest.json`)
 
 ### 6.2 Module
@@ -205,7 +205,7 @@ Notes:
 #### 6.2.1 `module search`
 
 ```text
-terraform-docs-cli module search --query vpc [--offset 0] [--limit 20]
+terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
 ```
 
 Output fields:
@@ -220,7 +220,7 @@ Output fields:
 #### 6.2.2 `module get`
 
 ```text
-terraform-docs-cli module get --id terraform-aws-modules/vpc/aws/6.0.1
+terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
 ```
 
 Input constraints:
@@ -231,9 +231,9 @@ Input constraints:
 
 ```text
 terraform-docs-cli module latest-version \
-  --publisher terraform-aws-modules \
-  --name vpc \
-  --provider aws
+  -publisher terraform-aws-modules \
+  -name vpc \
+  -provider aws
 ```
 
 ### 6.3 Policy
@@ -241,7 +241,7 @@ terraform-docs-cli module latest-version \
 #### 6.3.1 `policy search`
 
 ```text
-terraform-docs-cli policy search --query cis
+terraform-docs-cli policy search -query cis
 ```
 
 Output fields:
@@ -254,7 +254,7 @@ Output fields:
 #### 6.3.2 `policy get`
 
 ```text
-terraform-docs-cli policy get --id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
+terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
 ```
 
 ### 6.4 Guide
@@ -262,16 +262,16 @@ terraform-docs-cli policy get --id policies/hashicorp/CIS-Policy-Set-for-AWS-Ter
 #### 6.4.1 `guide style`
 
 ```text
-terraform-docs-cli guide style [--output markdown]
+terraform-docs-cli guide style [-output markdown]
 ```
 
 #### 6.4.2 `guide module-dev`
 
 ```text
-terraform-docs-cli guide module-dev [--section all]
+terraform-docs-cli guide module-dev [-section all]
 ```
 
-`--section`:
+`-section`:
 
 - `all|index|composition|structure|providers|publish|refactoring`
 
@@ -334,7 +334,7 @@ terraform-docs-cli guide module-dev [--section all]
 ## 9. Error Handling
 
 - Error messages are written to stderr
-- `--debug` adds HTTP status, URL, and retry details
+- `-debug` adds HTTP status, URL, and retry details
 - Map `404` to exit code `2`
 - Map `429/5xx` (after retries exhausted) to exit code `3`
 
@@ -371,9 +371,9 @@ internal/output/        # stdout/file writer
   - `policy search|get`
   - `guide style|module-dev`
 - Cache key is composed from method + normalized URL + effective query + output-independent data
-- `--output` is presentation-only and must not affect cache keys
+- `-output` is presentation-only and must not affect cache keys
 - Expired entries (TTL exceeded) are treated as cache miss and replaced on successful refetch
-- With `--no-cache`, both cache read and write are disabled
+- With `-no-cache`, both cache read and write are disabled
 - On cache corruption, discard only the affected entry and continue by refetching
 
 ## 11. Test Specification
@@ -391,9 +391,9 @@ internal/output/        # stdout/file writer
 - Not found scenarios
 - API error scenarios (5xx / timeout)
 - Cache hit / miss / TTL expiry
-- No cache read/write when `--no-cache` is set
+- No cache read/write when `-no-cache` is set
 - `provider export` writes the expected directory structure
-- `provider export --clean` recreates output subtree correctly
+- `provider export -clean` recreates output subtree correctly
 
 ### 11.3 Snapshot Tests
 
