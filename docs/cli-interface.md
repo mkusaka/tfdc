@@ -36,8 +36,7 @@ Groups:
 ## Global Flags
 
 ```text
--output, -o        text|json|markdown   (default: text)
--write             Write output to file path (default: stdout)
+-chdir             Switch to a different working directory (auto-detects .terraform.lock.hcl)
 -timeout           HTTP timeout         (default: 10s)
 -retry             Retry count          (default: 3)
 -registry-url      Registry base URL    (default: https://registry.terraform.io)
@@ -48,11 +47,6 @@ Groups:
 -cache-ttl         Cache TTL             (default: 24h)
 -no-cache          Disable cache
 ```
-
-Notes.
-
-- `-output` controls presentation only. Data content should stay equivalent.
-- `-write` writes exactly the selected format, no extra headers.
 
 ## Provider Commands
 
@@ -97,7 +91,7 @@ Output fields.
 Fetch full provider doc content by exact `provider_doc_id`.
 
 ```text
-terraform-docs-cli provider get -doc-id 8894603 [-output markdown]
+terraform-docs-cli provider get -doc-id 8894603
 ```
 
 Flags.
@@ -232,7 +226,7 @@ terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terr
 Fetch Terraform style guide markdown.
 
 ```text
-terraform-docs-cli guide style [-output markdown]
+terraform-docs-cli guide style
 ```
 
 ### `guide module-dev`
@@ -262,7 +256,7 @@ Flags.
 ## Persistent Cache (MVP)
 
 - Enabled by default for registry and guide retrieval commands
-- Cache key is request-based and independent from `-output` format
+- Cache key is request-based
 - TTL is controlled by `-cache-ttl`
 - `-no-cache` disables both read/write cache behavior
 - Corrupted cache entry is ignored and replaced by fresh response

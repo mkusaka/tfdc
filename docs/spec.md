@@ -62,8 +62,7 @@ group:
 ### 5.2 Global Flags
 
 ```text
--output, -o     text|json|markdown   (default: text)
--write          Output file path      (default: stdout)
+-chdir          Switch to a different working directory (auto-detects .terraform.lock.hcl)
 -timeout        HTTP timeout          (default: 10s)
 -retry          Retry count           (default: 3)
 -registry-url   Registry base URL     (default: https://registry.terraform.io)
@@ -262,7 +261,7 @@ terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terr
 #### 6.4.1 `guide style`
 
 ```text
-terraform-docs-cli guide style [-output markdown]
+terraform-docs-cli guide style
 ```
 
 #### 6.4.2 `guide module-dev`
@@ -370,8 +369,7 @@ internal/output/        # stdout/file writer
   - `module search|get`
   - `policy search|get`
   - `guide style|module-dev`
-- Cache key is composed from method + normalized URL + effective query + output-independent data
-- `-output` is presentation-only and must not affect cache keys
+- Cache key is composed from method + normalized URL + effective query
 - Expired entries (TTL exceeded) are treated as cache miss and replaced on successful refetch
 - With `-no-cache`, both cache read and write are disabled
 - On cache corruption, discard only the affected entry and continue by refetching
