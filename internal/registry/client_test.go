@@ -112,6 +112,22 @@ func TestResolve_RootBasePathStillUsesRoot(t *testing.T) {
 	}
 }
 
+func TestResolve_PreservesEscapedSegmentsWhenPrependingBasePath(t *testing.T) {
+	c, err := NewClient(Config{BaseURL: "https://example.com/registry", Timeout: 5 * time.Second}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := c.resolve("/v2/provider-docs/..%2Ffoo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://example.com/registry/v2/provider-docs/..%2Ffoo"
+	if got != want {
+		t.Fatalf("unexpected resolved URL\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
 func TestGetJSON_RefetchesWhenCachedPayloadIsInvalidJSON(t *testing.T) {
 	var requestCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

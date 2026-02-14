@@ -213,7 +213,10 @@ func (c *Client) resolve(path string) (string, error) {
 	if strings.HasPrefix(path, "/") && c.baseURL.Path != "" && c.baseURL.Path != "/" {
 		basePath := "/" + strings.Trim(strings.TrimSpace(c.baseURL.Path), "/")
 		ref.Path = basePath + "/" + strings.TrimLeft(ref.Path, "/")
-		ref.RawPath = ""
+		if ref.RawPath != "" {
+			baseRawPath := "/" + strings.Trim(strings.TrimSpace(c.baseURL.EscapedPath()), "/")
+			ref.RawPath = baseRawPath + "/" + strings.TrimLeft(ref.RawPath, "/")
+		}
 	}
 
 	return c.baseURL.ResolveReference(ref).String(), nil
