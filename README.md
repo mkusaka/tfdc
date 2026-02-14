@@ -62,7 +62,7 @@ Optional flags:
 - `--format` (`markdown|json`, default: `markdown`)
 - `--categories` (default: `all`)
 - `--path-template` (default below)
-- `--clean` (remove derived export roots before writing)
+- `--clean` (remove previous export outputs for the same target before writing)
 
 Default template:
 
@@ -109,9 +109,12 @@ Available placeholders:
 Rules:
 
 - Unknown placeholders are rejected.
+- Malformed placeholder syntax (`{` / `}` mismatch) is rejected.
 - Resolved paths must remain inside `--out-dir`.
 - Path collisions are rejected (including collision with reserved manifest path).
 - Safety checks reject symlink traversal outside `--out-dir` for both write and `--clean` deletion paths.
+- `--clean` always removes files listed in the existing manifest for that provider version.
+- `--clean` removes a template root directory only when `--path-template` includes `{namespace}`, `{provider}`, and `{version}`.
 
 ## Global Flags
 

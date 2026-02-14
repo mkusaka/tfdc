@@ -51,6 +51,10 @@ func resolvePathWithinBase(path, baseAbs string) (string, error) {
 }
 
 func renderPathTemplate(template string, vars map[string]string) (string, error) {
+	if err := validatePathTemplateSyntax(template); err != nil {
+		return "", err
+	}
+
 	var b strings.Builder
 	cursor := 0
 
@@ -67,6 +71,14 @@ func renderPathTemplate(template string, vars map[string]string) (string, error)
 	}
 	b.WriteString(template[cursor:])
 	return b.String(), nil
+}
+
+func validatePathTemplateSyntax(template string) error {
+	leftover := rePlaceholder.ReplaceAllString(template, "")
+	if strings.ContainsAny(leftover, "{}") {
+		return fmt.Errorf("invalid placeholder syntax in path template")
+	}
+	return nil
 }
 
 func isPathWithinDir(baseAbs, targetAbs string) bool {

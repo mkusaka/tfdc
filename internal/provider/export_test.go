@@ -568,9 +568,9 @@ func TestExportDocs_CleanWithBracesInOutDir(t *testing.T) {
 	}
 }
 
-func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
+func TestExportDocs_CleanUsesScopedPathTemplateRoot(t *testing.T) {
 	outDir := t.TempDir()
-	staleCustom := filepath.Join(outDir, "custom", "guides", "stale.md")
+	staleCustom := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0", "guides", "stale.md")
 	if err := os.MkdirAll(filepath.Dir(staleCustom), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -586,7 +586,7 @@ func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
 		Format:       "markdown",
 		OutDir:       outDir,
 		Categories:   []string{"guides"},
-		PathTemplate: "{out}/custom/{category}/{slug}.{ext}",
+		PathTemplate: "{out}/custom/{namespace}/{provider}/{version}/{category}/{slug}.{ext}",
 		Clean:        true,
 	})
 	if err != nil {
@@ -594,10 +594,10 @@ func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
 	}
 
 	if _, err := os.Stat(staleCustom); !os.IsNotExist(err) {
-		t.Fatalf("expected stale custom file to be removed by --clean with custom template")
+		t.Fatalf("expected stale custom file to be removed by --clean with scoped custom template")
 	}
 
-	newGuide := filepath.Join(outDir, "custom", "guides", "tag-policy-compliance.md")
+	newGuide := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0", "guides", "tag-policy-compliance.md")
 	if _, err := os.Stat(newGuide); err != nil {
 		t.Fatalf("expected exported guide in custom template path: %v", err)
 	}
@@ -605,7 +605,7 @@ func TestExportDocs_CleanUsesPathTemplateRoot(t *testing.T) {
 
 func TestExportDocs_CleanUsesRelativePathTemplateRoot(t *testing.T) {
 	outDir := t.TempDir()
-	staleCustom := filepath.Join(outDir, "custom", "guides", "stale.md")
+	staleCustom := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0", "guides", "stale.md")
 	if err := os.MkdirAll(filepath.Dir(staleCustom), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +621,7 @@ func TestExportDocs_CleanUsesRelativePathTemplateRoot(t *testing.T) {
 		Format:       "markdown",
 		OutDir:       outDir,
 		Categories:   []string{"guides"},
-		PathTemplate: "custom/{category}/{slug}.{ext}",
+		PathTemplate: "custom/{namespace}/{provider}/{version}/{category}/{slug}.{ext}",
 		Clean:        true,
 	})
 	if err != nil {
@@ -629,12 +629,70 @@ func TestExportDocs_CleanUsesRelativePathTemplateRoot(t *testing.T) {
 	}
 
 	if _, err := os.Stat(staleCustom); !os.IsNotExist(err) {
-		t.Fatalf("expected stale custom file to be removed by --clean with relative template")
+		t.Fatalf("expected stale custom file to be removed by --clean with relative scoped template")
 	}
 
-	newGuide := filepath.Join(outDir, "custom", "guides", "tag-policy-compliance.md")
+	newGuide := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0", "guides", "tag-policy-compliance.md")
 	if _, err := os.Stat(newGuide); err != nil {
 		t.Fatalf("expected exported guide in relative template path: %v", err)
+	}
+}
+
+func TestExportDocs_CleanWithUnscopedTemplateRemovesManagedFilesOnly(t *testing.T) {
+	outDir := t.TempDir()
+	client := &fakeAPIClient{}
+
+	baseOpts := ExportOptions{
+		Namespace:    "hashicorp",
+		Name:         "aws",
+		Version:      "6.31.0",
+		Format:       "markdown",
+		OutDir:       outDir,
+		PathTemplate: "{out}/custom/{slug}.{ext}",
+	}
+
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    baseOpts.Namespace,
+		Name:         baseOpts.Name,
+		Version:      baseOpts.Version,
+		Format:       baseOpts.Format,
+		OutDir:       baseOpts.OutDir,
+		Categories:   []string{"guides"},
+		PathTemplate: baseOpts.PathTemplate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	managedPath := filepath.Join(outDir, "custom", "tag-policy-compliance.md")
+	if _, err := os.Stat(managedPath); err != nil {
+		t.Fatalf("expected managed file to be written: %v", err)
+	}
+
+	unrelatedPath := filepath.Join(outDir, "custom", "unrelated.txt")
+	if err := os.WriteFile(unrelatedPath, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    baseOpts.Namespace,
+		Name:         baseOpts.Name,
+		Version:      baseOpts.Version,
+		Format:       baseOpts.Format,
+		OutDir:       baseOpts.OutDir,
+		Categories:   []string{"functions"},
+		PathTemplate: baseOpts.PathTemplate,
+		Clean:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(managedPath); !os.IsNotExist(err) {
+		t.Fatalf("expected managed file to be removed by --clean")
+	}
+	if _, err := os.Stat(unrelatedPath); err != nil {
+		t.Fatalf("expected unrelated file to remain: %v", err)
 	}
 }
 
@@ -672,7 +730,7 @@ func TestExportDocs_CleanRejectsSymlinkedTargetOutsideOutDir(t *testing.T) {
 	if !errors.As(err, &vErr) {
 		t.Fatalf("expected validation error, got %T (%v)", err, err)
 	}
-	if !strings.Contains(vErr.Error(), "unsafe --clean target") {
+	if !strings.Contains(vErr.Error(), "unsafe --clean target") && !strings.Contains(vErr.Error(), "unsafe manifest path") {
 		t.Fatalf("unexpected error message: %s", vErr.Error())
 	}
 
@@ -823,6 +881,30 @@ func TestExportDocs_InvalidPathTemplateFailsWhenNoDocsFound(t *testing.T) {
 	manifestPath := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "_manifest.json")
 	if _, statErr := os.Stat(manifestPath); !os.IsNotExist(statErr) {
 		t.Fatalf("manifest must not be written on invalid template: %v", statErr)
+	}
+}
+
+func TestExportDocs_InvalidPathTemplateSyntaxFailsWhenNoDocsFound(t *testing.T) {
+	outDir := t.TempDir()
+	client := &fakeAPIClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    "hashicorp",
+		Name:         "aws",
+		Version:      "6.31.0",
+		Format:       "markdown",
+		OutDir:       outDir,
+		Categories:   []string{"functions"},
+		PathTemplate: "{out}/custom/{slug.{ext}",
+	})
+	if err == nil {
+		t.Fatalf("expected validation error for malformed template syntax")
+	}
+	var vErr *ValidationError
+	if !errors.As(err, &vErr) {
+		t.Fatalf("expected validation error, got %T (%v)", err, err)
+	}
+	if !strings.Contains(vErr.Error(), "invalid placeholder syntax") {
+		t.Fatalf("unexpected error message: %s", vErr.Error())
 	}
 }
 

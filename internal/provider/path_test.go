@@ -98,6 +98,26 @@ func TestBuildOutputPath_RejectsUnresolvedPlaceholderWithHyphen(t *testing.T) {
 	}
 }
 
+func TestBuildOutputPath_RejectsMalformedPlaceholderSyntax(t *testing.T) {
+	outDir := t.TempDir()
+	tpl := "{out}/terraform/{namespace}/{provider}/{version}/docs/{slug.{ext}"
+	vars := map[string]string{
+		"out":       outDir,
+		"namespace": "hashicorp",
+		"provider":  "aws",
+		"version":   "6.31.0",
+		"slug":      "tag-policy-compliance",
+		"ext":       "md",
+	}
+	_, err := BuildOutputPath(tpl, vars, outDir)
+	if err == nil {
+		t.Fatalf("expected invalid placeholder syntax error")
+	}
+	if !strings.Contains(err.Error(), "invalid placeholder syntax") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestBuildOutputPath_RejectsOutDirAncestorSymlink(t *testing.T) {
 	rootDir := t.TempDir()
 	externalDir := t.TempDir()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -484,16 +485,24 @@ func writeManifest(opts ExportOptions, docs []manifestItem) (string, error) {
 }
 
 func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
-	templateRoot, err := deriveTemplateRoot(opts, ext)
+	targetSet := make(map[string]struct{})
+
+	manifestTargets, err := deriveManagedTargetsFromManifest(opts)
 	if err != nil {
 		return nil, err
 	}
-	manifestRoot := manifestRootForOptions(opts)
-
-	targetSet := map[string]struct{}{
-		templateRoot: {},
-		manifestRoot: {},
+	for _, target := range manifestTargets {
+		targetSet[target] = struct{}{}
 	}
+
+	if isCleanTemplateScoped(opts.PathTemplate) {
+		templateRoot, err := deriveTemplateRoot(opts, ext)
+		if err != nil {
+			return nil, err
+		}
+		targetSet[templateRoot] = struct{}{}
+	}
+
 	targets := make([]string, 0, len(targetSet))
 	for target := range targetSet {
 		if target == opts.OutDir {
@@ -507,6 +516,51 @@ func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
 		return len(targets[i]) > len(targets[j])
 	})
 	return targets, nil
+}
+
+func deriveManagedTargetsFromManifest(opts ExportOptions) ([]string, error) {
+	manifestPath := manifestPathForOptions(opts)
+	b, err := os.ReadFile(manifestPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, &WriteError{Path: manifestPath, Err: err}
+	}
+
+	var m manifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, &ValidationError{Message: fmt.Sprintf("failed to decode existing manifest for --clean: %v", err)}
+	}
+
+	targetSet := map[string]struct{}{
+		manifestPath: {},
+	}
+	for _, item := range m.Docs {
+		if strings.TrimSpace(item.Path) == "" {
+			continue
+		}
+		targetAbs, err := resolvePathWithinBase(filepath.FromSlash(item.Path), opts.OutDir)
+		if err != nil {
+			return nil, &ValidationError{Message: fmt.Sprintf("invalid manifest doc path for --clean: %v", err)}
+		}
+		if !isPathWithinDir(opts.OutDir, targetAbs) {
+			return nil, &ValidationError{Message: fmt.Sprintf("manifest doc path is outside --out-dir: %s", targetAbs)}
+		}
+		targetSet[targetAbs] = struct{}{}
+	}
+
+	targets := make([]string, 0, len(targetSet))
+	for target := range targetSet {
+		targets = append(targets, target)
+	}
+	return targets, nil
+}
+
+func isCleanTemplateScoped(template string) bool {
+	return strings.Contains(template, "{namespace}") &&
+		strings.Contains(template, "{provider}") &&
+		strings.Contains(template, "{version}")
 }
 
 func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
