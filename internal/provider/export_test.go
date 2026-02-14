@@ -306,6 +306,81 @@ func (f *fakeDetailRecoverClient) Get(_ context.Context, path string) ([]byte, e
 	return nil, fmt.Errorf("unexpected Get path: %s", path)
 }
 
+type fakeDetailRecoverRawRetryErrorClient struct {
+	getCalls int
+}
+
+func (f *fakeDetailRecoverRawRetryErrorClient) GetJSON(_ context.Context, path string, dst any) error {
+	if strings.HasPrefix(path, "/v2/providers/hashicorp/aws") {
+		data := map[string]any{
+			"included": []any{
+				map[string]any{
+					"type": "provider-versions",
+					"id":   "70800",
+					"attributes": map[string]any{
+						"version": "6.31.0",
+					},
+				},
+			},
+		}
+		b, _ := json.Marshal(data)
+		return json.Unmarshal(b, dst)
+	}
+
+	if strings.HasPrefix(path, "/v2/provider-docs?") {
+		u, err := url.Parse(path)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		cat := q.Get("filter[category]")
+		page := q.Get("page[number]")
+		if cat == "guides" && page == "1" {
+			b, _ := json.Marshal(map[string]any{
+				"data": []map[string]any{{
+					"id": "1",
+					"attributes": map[string]any{
+						"category": "guides",
+						"slug":     "tag-policy-compliance",
+						"title":    "Tag Policy Compliance",
+					},
+				}},
+			})
+			return json.Unmarshal(b, dst)
+		}
+		b, _ := json.Marshal(map[string]any{"data": []any{}})
+		return json.Unmarshal(b, dst)
+	}
+
+	if strings.HasPrefix(path, "/v2/provider-docs/1") {
+		b, _ := json.Marshal(map[string]any{
+			"data": map[string]any{
+				"id": "1",
+				"attributes": map[string]any{
+					"category": "guides",
+					"slug":     "tag-policy-compliance",
+					"title":    "Tag Policy Compliance",
+					"content":  "# guide content",
+				},
+			},
+		})
+		return json.Unmarshal(b, dst)
+	}
+
+	return fmt.Errorf("unexpected GetJSON path: %s", path)
+}
+
+func (f *fakeDetailRecoverRawRetryErrorClient) Get(_ context.Context, path string) ([]byte, error) {
+	if strings.HasPrefix(path, "/v2/provider-docs/1") {
+		f.getCalls++
+		if f.getCalls == 1 {
+			return []byte("not-json"), nil
+		}
+		return nil, fmt.Errorf("unexpected second raw fetch")
+	}
+	return nil, fmt.Errorf("unexpected Get path: %s", path)
+}
+
 type fakeDetailRecoverRefetchErrorClient struct {
 	refetchErr error
 }
@@ -457,6 +532,29 @@ func TestExportDocs_RecoversFromInvalidDetailJSONViaGetJSON(t *testing.T) {
 	}
 }
 
+func TestExportDocs_MarkdownRecoveryDoesNotRequireSecondRawFetch(t *testing.T) {
+	outDir := t.TempDir()
+	client := &fakeDetailRecoverRawRetryErrorClient{}
+
+	summary, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:  "hashicorp",
+		Name:       "aws",
+		Version:    "6.31.0",
+		Format:     "markdown",
+		OutDir:     outDir,
+		Categories: []string{"guides"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Written != 1 {
+		t.Fatalf("unexpected written count: %d", summary.Written)
+	}
+	if client.getCalls != 1 {
+		t.Fatalf("expected markdown recovery to avoid second raw fetch, got %d calls", client.getCalls)
+	}
+}
+
 func TestExportDocs_JSONFailsWhenRecoveredRawIsInvalid(t *testing.T) {
 	outDir := t.TempDir()
 	client := &fakeDetailRecoverClient{}
@@ -491,7 +589,7 @@ func TestGetProviderDocDetail_PropagatesRefetchError(t *testing.T) {
 	wantErr := &NotFoundError{Message: "provider doc not found"}
 	client := &fakeDetailRecoverRefetchErrorClient{refetchErr: wantErr}
 
-	_, _, err := getProviderDocDetail(context.Background(), client, "1")
+	_, _, err := getProviderDocDetail(context.Background(), client, "1", true)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -719,7 +817,7 @@ func TestExportDocs_CleanUsesRelativePathTemplateRoot(t *testing.T) {
 	}
 }
 
-func TestExportDocs_CleanWithUnscopedTemplateRemovesManagedFilesOnly(t *testing.T) {
+func TestExportDocs_CleanWithUnscopedTemplateKeepsCustomFiles(t *testing.T) {
 	outDir := t.TempDir()
 	client := &fakeAPIClient{}
 
@@ -769,8 +867,8 @@ func TestExportDocs_CleanWithUnscopedTemplateRemovesManagedFilesOnly(t *testing.
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(managedPath); !os.IsNotExist(err) {
-		t.Fatalf("expected managed file to be removed by --clean")
+	if _, err := os.Stat(managedPath); err != nil {
+		t.Fatalf("expected managed file to remain for unscoped template clean: %v", err)
 	}
 	if _, err := os.Stat(unrelatedPath); err != nil {
 		t.Fatalf("expected unrelated file to remain: %v", err)
@@ -808,6 +906,52 @@ func TestExportDocs_CleanKeepsOtherVersionsWhenVersionIsFileName(t *testing.T) {
 	currentVersionPath := filepath.Join(outDir, "custom", "hashicorp", "aws", "6.31.0.md")
 	if _, err := os.Stat(currentVersionPath); err != nil {
 		t.Fatalf("expected current version file to be written, got: %v", err)
+	}
+}
+
+func TestExportDocs_CleanDoesNotDeleteArbitraryOutDirFilesFromManifest(t *testing.T) {
+	outDir := t.TempDir()
+	guardPath := filepath.Join(outDir, "README.md")
+	if err := os.WriteFile(guardPath, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	manifestPath := filepath.Join(outDir, "terraform", "hashicorp", "aws", "6.31.0", "docs", "_manifest.json")
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	poisonManifest := `{
+  "provider": "aws",
+  "namespace": "hashicorp",
+  "version": "6.31.0",
+  "format": "markdown",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "total": 1,
+  "docs": [
+    {"doc_id":"x","category":"guides","slug":"x","title":"x","path":"README.md"}
+  ]
+}`
+	if err := os.WriteFile(manifestPath, []byte(poisonManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &fakeAPIClient{}
+	_, err := ExportDocs(context.Background(), client, ExportOptions{
+		Namespace:    "hashicorp",
+		Name:         "aws",
+		Version:      "6.31.0",
+		Format:       "markdown",
+		OutDir:       outDir,
+		Categories:   []string{"functions"},
+		PathTemplate: "{out}/custom/{slug}.{ext}",
+		Clean:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(guardPath); err != nil {
+		t.Fatalf("expected guard file to remain, got: %v", err)
 	}
 }
 

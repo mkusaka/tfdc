@@ -187,7 +187,7 @@ terraform-docs-cli provider export \
 - `--out-dir` 必須
 - `--categories` 省略時 `all`（`resources,data-sources,ephemeral-resources,functions,guides,overview,actions,list-resources`）
 - `--path-template` 省略時デフォルトレイアウト
-- `--clean` 指定時は既存 manifest に記録されたパスを削除し、さらに導出されたテンプレートルートが namespace/provider/version でスコープされる場合のみそのルートを削除して再生成
+- `--clean` 指定時は既存 manifest ファイルを削除し、さらに導出されたテンプレートルートが namespace/provider/version でスコープされる場合のみそのルートを削除して再生成
 
 デフォルト保存パス:
 

@@ -165,7 +165,7 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 				seen[doc.ID] = struct{}{}
 				newDocsOnPage++
 
-				detail, raw, err := getProviderDocDetail(ctx, client, doc.ID)
+				detail, raw, err := getProviderDocDetail(ctx, client, doc.ID, opts.Format == "json")
 				if err != nil {
 					return nil, err
 				}
@@ -415,7 +415,7 @@ func listProviderDocs(ctx context.Context, client APIClient, providerVersionID, 
 	return resp.Data, nil
 }
 
-func getProviderDocDetail(ctx context.Context, client APIClient, docID string) (providerDocDetailResponse, []byte, error) {
+func getProviderDocDetail(ctx context.Context, client APIClient, docID string, requireRaw bool) (providerDocDetailResponse, []byte, error) {
 	var detail providerDocDetailResponse
 	path := fmt.Sprintf("/v2/provider-docs/%s", url.PathEscape(docID))
 	raw, err := client.Get(ctx, path)
@@ -427,6 +427,9 @@ func getProviderDocDetail(ctx context.Context, client APIClient, docID string) (
 		// and refetch when cached payload is undecodable.
 		if jsonErr := client.GetJSON(ctx, path, &detail); jsonErr != nil {
 			return detail, nil, jsonErr
+		}
+		if !requireRaw {
+			return detail, nil, nil
 		}
 		// Re-read raw after successful recovery so --format json preserves
 		// fields that are not represented in providerDocDetailResponse.
@@ -528,41 +531,13 @@ func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
 
 func deriveManagedTargetsFromManifest(opts ExportOptions) ([]string, error) {
 	manifestPath := manifestPathForOptions(opts)
-	b, err := os.ReadFile(manifestPath)
-	if err != nil {
+	if _, err := os.Stat(manifestPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, &WriteError{Path: manifestPath, Err: err}
 	}
-
-	var m manifest
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, &ValidationError{Message: fmt.Sprintf("failed to decode existing manifest for --clean: %v", err)}
-	}
-
-	targetSet := map[string]struct{}{
-		manifestPath: {},
-	}
-	for _, item := range m.Docs {
-		if strings.TrimSpace(item.Path) == "" {
-			continue
-		}
-		targetAbs, err := resolvePathWithinBase(filepath.FromSlash(item.Path), opts.OutDir)
-		if err != nil {
-			return nil, &ValidationError{Message: fmt.Sprintf("invalid manifest doc path for --clean: %v", err)}
-		}
-		if !isPathWithinDir(opts.OutDir, targetAbs) {
-			return nil, &ValidationError{Message: fmt.Sprintf("manifest doc path is outside --out-dir: %s", targetAbs)}
-		}
-		targetSet[targetAbs] = struct{}{}
-	}
-
-	targets := make([]string, 0, len(targetSet))
-	for target := range targetSet {
-		targets = append(targets, target)
-	}
-	return targets, nil
+	return []string{manifestPath}, nil
 }
 
 func isCleanRootScopedToProviderVersion(rootAbs string, opts ExportOptions) bool {

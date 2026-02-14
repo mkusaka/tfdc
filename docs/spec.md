@@ -187,7 +187,7 @@ Inputs:
 - `--out-dir` required
 - `--categories` default `all` (`resources,data-sources,ephemeral-resources,functions,guides,overview,actions,list-resources`)
 - `--path-template` optional; uses default layout if omitted
-- `--clean` removes paths listed in the existing manifest, and additionally removes a derived template root only when it is namespace/provider/version-scoped
+- `--clean` removes the existing manifest file, and additionally removes a derived template root only when it is namespace/provider/version-scoped
 
 Default persistence path:
 

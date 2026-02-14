@@ -113,7 +113,7 @@ Rules:
 - Resolved paths must remain inside `--out-dir`.
 - Path collisions are rejected (including collision with reserved manifest path).
 - Safety checks reject symlink traversal outside `--out-dir` for both write and `--clean` deletion paths.
-- `--clean` always removes files listed in the existing manifest for that provider version.
+- `--clean` removes the existing manifest file for that provider version before rewriting.
 - `--clean` removes a template root directory only when the derived root is scoped by namespace/provider/version path segments.
 
 ## Global Flags
