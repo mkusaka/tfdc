@@ -41,6 +41,16 @@ func TestParseGlobalFlags_RejectsEmptyCacheDirWhenCacheEnabled(t *testing.T) {
 	}
 }
 
+func TestParseGlobalFlags_RejectsTildeUserCacheDirWhenCacheEnabled(t *testing.T) {
+	_, _, err := parseGlobalFlags([]string{"--cache-dir", "~foo/cache", "provider", "export"})
+	if err == nil {
+		t.Fatalf("expected error for unsupported home path style")
+	}
+	if !strings.Contains(err.Error(), "unsupported home path") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestExecute_UnknownProviderExportFlagReturnsExitCode1(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer

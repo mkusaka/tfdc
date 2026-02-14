@@ -268,6 +268,9 @@ func expandHomeDir(path string) (string, error) {
 	if path == "" || path[0] != '~' {
 		return path, nil
 	}
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return "", fmt.Errorf("unsupported home path: %s (use ~ or ~/...)", path)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
