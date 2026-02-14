@@ -36,23 +36,23 @@ Groups:
 ## Global Flags
 
 ```text
---output, -o        text|json|markdown   (default: text)
---write             Write output to file path (default: stdout)
---timeout           HTTP timeout         (default: 10s)
---retry             Retry count          (default: 3)
---registry-url      Registry base URL    (default: https://registry.terraform.io)
---insecure          Skip TLS verification
---user-agent        Override User-Agent
---debug             Debug log to stderr
---cache-dir         Cache directory       (default: ~/.cache/terraform-docs-cli)
---cache-ttl         Cache TTL             (default: 24h)
---no-cache          Disable cache
+-output, -o        text|json|markdown   (default: text)
+-write             Write output to file path (default: stdout)
+-timeout           HTTP timeout         (default: 10s)
+-retry             Retry count          (default: 3)
+-registry-url      Registry base URL    (default: https://registry.terraform.io)
+-insecure          Skip TLS verification
+-user-agent        Override User-Agent
+-debug             Debug log to stderr
+-cache-dir         Cache directory       (default: ~/.cache/terraform-docs-cli)
+-cache-ttl         Cache TTL             (default: 24h)
+-no-cache          Disable cache
 ```
 
 Notes.
 
-- `--output` controls presentation only. Data content should stay equivalent.
-- `--write` writes exactly the selected format, no extra headers.
+- `-output` controls presentation only. Data content should stay equivalent.
+- `-write` writes exactly the selected format, no extra headers.
 
 ## Provider Commands
 
@@ -62,24 +62,24 @@ Search candidate provider docs and return `provider_doc_id` list.
 
 ```text
 terraform-docs-cli provider search \
-  --name aws \
-  --namespace hashicorp \
-  --service ec2 \
-  --type resources \
-  [--version latest] \
-  [--limit 20]
+  -name aws \
+  -namespace hashicorp \
+  -service ec2 \
+  -type resources \
+  [-version latest] \
+  [-limit 20]
 ```
 
 Flags.
 
 ```text
---name         required
---namespace    default: hashicorp
---service      required; slug-like search token
---type         resources|data-sources|functions|guides|overview|actions|list-resources
+-name         required
+-namespace    default: hashicorp
+-service      required; slug-like search token
+-type         resources|data-sources|functions|guides|overview|actions|list-resources
                |ephemeral-resources
---version      semver or latest (default: latest)
---limit        max candidates in output (default: 20)
+-version      semver or latest (default: latest)
+-limit        max candidates in output (default: 20)
 ```
 
 Output fields.
@@ -97,13 +97,13 @@ Output fields.
 Fetch full provider doc content by exact `provider_doc_id`.
 
 ```text
-terraform-docs-cli provider get --doc-id 8894603 [--output markdown]
+terraform-docs-cli provider get -doc-id 8894603 [-output markdown]
 ```
 
 Flags.
 
 ```text
---doc-id    required; numeric
+-doc-id    required; numeric
 ```
 
 ### `provider doc`
@@ -112,14 +112,14 @@ Convenience command: search and fetch in one call.
 
 ```text
 terraform-docs-cli provider doc \
-  --name aws --namespace hashicorp --service ec2 --type resources \
-  [--version latest] [--select best]
+  -name aws -namespace hashicorp -service ec2 -type resources \
+  [-version latest] [-select best]
 ```
 
 Flags.
 
 ```text
---select    best|first|interactive  (default: best)
+-select    best|first|interactive  (default: best)
 ```
 
 Selection policy.
@@ -131,13 +131,13 @@ Selection policy.
 ### `provider latest-version`
 
 ```text
-terraform-docs-cli provider latest-version --namespace hashicorp --name aws
+terraform-docs-cli provider latest-version -namespace hashicorp -name aws
 ```
 
 ### `provider capabilities`
 
 ```text
-terraform-docs-cli provider capabilities --namespace hashicorp --name aws [--version latest]
+terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-version latest]
 ```
 
 ### `provider export`
@@ -146,14 +146,14 @@ Persist all docs of a specific provider version to a target directory.
 
 ```text
 terraform-docs-cli provider export \
-  --namespace hashicorp \
-  --name aws \
-  --version 6.31.0 \
-  --format markdown \
-  --out-dir ./dir \
-  [--categories all] \
-  [--path-template "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"] \
-  [--clean]
+  -namespace hashicorp \
+  -name aws \
+  -version 6.31.0 \
+  -format markdown \
+  -out-dir ./dir \
+  [-categories all] \
+  [-path-template "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"] \
+  [-clean]
 ```
 
 Default output layout.
@@ -173,7 +173,7 @@ Export side effects.
 ### `module search`
 
 ```text
-terraform-docs-cli module search --query vpc [--offset 0] [--limit 20]
+terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
 ```
 
 Output fields.
@@ -188,7 +188,7 @@ Output fields.
 ### `module get`
 
 ```text
-terraform-docs-cli module get --id terraform-aws-modules/vpc/aws/6.0.1
+terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
 ```
 
 Validation.
@@ -199,9 +199,9 @@ Validation.
 
 ```text
 terraform-docs-cli module latest-version \
-  --publisher terraform-aws-modules \
-  --name vpc \
-  --provider aws
+  -publisher terraform-aws-modules \
+  -name vpc \
+  -provider aws
 ```
 
 ## Policy Commands
@@ -209,7 +209,7 @@ terraform-docs-cli module latest-version \
 ### `policy search`
 
 ```text
-terraform-docs-cli policy search --query cis
+terraform-docs-cli policy search -query cis
 ```
 
 Output fields.
@@ -222,7 +222,7 @@ Output fields.
 ### `policy get`
 
 ```text
-terraform-docs-cli policy get --id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
+terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
 ```
 
 ## Guide Commands
@@ -232,7 +232,7 @@ terraform-docs-cli policy get --id policies/hashicorp/CIS-Policy-Set-for-AWS-Ter
 Fetch Terraform style guide markdown.
 
 ```text
-terraform-docs-cli guide style [--output markdown]
+terraform-docs-cli guide style [-output markdown]
 ```
 
 ### `guide module-dev`
@@ -240,13 +240,13 @@ terraform-docs-cli guide style [--output markdown]
 Fetch module development guide markdown.
 
 ```text
-terraform-docs-cli guide module-dev [--section all]
+terraform-docs-cli guide module-dev [-section all]
 ```
 
 Flags.
 
 ```text
---section    all|index|composition|structure|providers|publish|refactoring
+-section    all|index|composition|structure|providers|publish|refactoring
 ```
 
 ## Exit Codes
@@ -262,9 +262,9 @@ Flags.
 ## Persistent Cache (MVP)
 
 - Enabled by default for registry and guide retrieval commands
-- Cache key is request-based and independent from `--output` format
-- TTL is controlled by `--cache-ttl`
-- `--no-cache` disables both read/write cache behavior
+- Cache key is request-based and independent from `-output` format
+- TTL is controlled by `-cache-ttl`
+- `-no-cache` disables both read/write cache behavior
 - Corrupted cache entry is ignored and replaced by fresh response
 
 ## Output Contract

@@ -62,17 +62,17 @@ group:
 ### 5.2 グローバルフラグ
 
 ```text
---output, -o     text|json|markdown   (default: text)
---write          出力ファイルパス      (default: stdout)
---timeout        HTTPタイムアウト      (default: 10s)
---retry          リトライ回数          (default: 3)
---registry-url   RegistryベースURL     (default: https://registry.terraform.io)
---insecure       TLS検証スキップ
---user-agent     User-Agent上書き
---debug          デバッグログ出力
---cache-dir      キャッシュディレクトリ (default: ~/.cache/terraform-docs-cli)
---cache-ttl      キャッシュ有効期間     (default: 24h)
---no-cache       キャッシュを無効化
+-output, -o     text|json|markdown   (default: text)
+-write          出力ファイルパス      (default: stdout)
+-timeout        HTTPタイムアウト      (default: 10s)
+-retry          リトライ回数          (default: 3)
+-registry-url   RegistryベースURL     (default: https://registry.terraform.io)
+-insecure       TLS検証スキップ
+-user-agent     User-Agent上書き
+-debug          デバッグログ出力
+-cache-dir      キャッシュディレクトリ (default: ~/.cache/terraform-docs-cli)
+-cache-ttl      キャッシュ有効期間     (default: 24h)
+-no-cache       キャッシュを無効化
 ```
 
 ## 6. コマンド詳細
@@ -85,23 +85,23 @@ Provider ドキュメント候補を検索し、`provider_doc_id` を返す。
 
 ```text
 terraform-docs-cli provider search \
-  --name aws \
-  --namespace hashicorp \
-  --service ec2 \
-  --type resources \
-  [--version latest] \
-  [--limit 20]
+  -name aws \
+  -namespace hashicorp \
+  -service ec2 \
+  -type resources \
+  [-version latest] \
+  [-limit 20]
 ```
 
 入力:
 
-- `--name` 必須
-- `--namespace` 省略時 `hashicorp`
-- `--service` 必須
-- `--type` 必須  
+- `-name` 必須
+- `-namespace` 省略時 `hashicorp`
+- `-service` 必須
+- `-type` 必須
   `resources|data-sources|ephemeral-resources|functions|guides|overview|actions|list-resources`
-- `--version` 省略時 `latest`
-- `--limit` 省略時 `20`
+- `-version` 省略時 `latest`
+- `-limit` 省略時 `20`
 
 出力項目:
 
@@ -118,12 +118,12 @@ terraform-docs-cli provider search \
 `provider_doc_id` を指定して全文取得。
 
 ```text
-terraform-docs-cli provider get --doc-id 8894603
+terraform-docs-cli provider get -doc-id 8894603
 ```
 
 入力:
 
-- `--doc-id` 必須（数値）
+- `-doc-id` 必須（数値）
 
 出力:
 
@@ -136,13 +136,13 @@ terraform-docs-cli provider get --doc-id 8894603
 
 ```text
 terraform-docs-cli provider doc \
-  --name aws --namespace hashicorp --service ec2 --type resources \
-  [--version latest] [--select best]
+  -name aws -namespace hashicorp -service ec2 -type resources \
+  [-version latest] [-select best]
 ```
 
 入力:
 
-- `--select`: `best|first|interactive`（default: `best`）
+- `-select`: `best|first|interactive`（default: `best`）
 
 選択ルール:
 
@@ -153,13 +153,13 @@ terraform-docs-cli provider doc \
 #### 6.1.4 `provider latest-version`
 
 ```text
-terraform-docs-cli provider latest-version --namespace hashicorp --name aws
+terraform-docs-cli provider latest-version -namespace hashicorp -name aws
 ```
 
 #### 6.1.5 `provider capabilities`
 
 ```text
-terraform-docs-cli provider capabilities --namespace hashicorp --name aws [--version latest]
+terraform-docs-cli provider capabilities -namespace hashicorp -name aws [-version latest]
 ```
 
 #### 6.1.6 `provider export`
@@ -168,26 +168,26 @@ terraform-docs-cli provider capabilities --namespace hashicorp --name aws [--ver
 
 ```text
 terraform-docs-cli provider export \
-  --namespace hashicorp \
-  --name aws \
-  --version 6.31.0 \
-  --format markdown \
-  --out-dir ./dir \
-  [--categories all] \
-  [--path-template "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"] \
-  [--clean]
+  -namespace hashicorp \
+  -name aws \
+  -version 6.31.0 \
+  -format markdown \
+  -out-dir ./dir \
+  [-categories all] \
+  [-path-template "{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}"] \
+  [-clean]
 ```
 
 入力:
 
-- `--namespace` 省略時 `hashicorp`
-- `--name` 必須
-- `--version` 必須（明示指定）
-- `--format` `markdown|json`（default: `markdown`）
-- `--out-dir` 必須
-- `--categories` 省略時 `all`（`resources,data-sources,ephemeral-resources,functions,guides,overview,actions,list-resources`）
-- `--path-template` 省略時デフォルトレイアウト
-- `--clean` 指定時は既存 manifest ファイルを削除し、さらに導出されたテンプレートルートが namespace/provider/version でスコープされる場合のみそのルートを削除して再生成
+- `-namespace` 省略時 `hashicorp`
+- `-name` 必須
+- `-version` 必須（明示指定）
+- `-format` `markdown|json`（default: `markdown`）
+- `-out-dir` 必須
+- `-categories` 省略時 `all`（`resources,data-sources,ephemeral-resources,functions,guides,overview,actions,list-resources`）
+- `-path-template` 省略時デフォルトレイアウト
+- `-clean` 指定時は既存 manifest ファイルを削除し、さらに導出されたテンプレートルートが namespace/provider/version でスコープされる場合のみそのルートを削除して再生成
 
 デフォルト保存パス:
 
@@ -197,7 +197,7 @@ terraform-docs-cli provider export \
 補足:
 
 - `{ext}` は `markdown => md`, `json => json`
-- エクスポート結果の一覧として namespace スコープの `_manifest.json` を出力する  
+- エクスポート結果の一覧として namespace スコープの `_manifest.json` を出力する
   (`{out}/terraform/{namespace}/{provider}/{version}/docs/_manifest.json`)
 
 ### 6.2 Module
@@ -205,7 +205,7 @@ terraform-docs-cli provider export \
 #### 6.2.1 `module search`
 
 ```text
-terraform-docs-cli module search --query vpc [--offset 0] [--limit 20]
+terraform-docs-cli module search -query vpc [-offset 0] [-limit 20]
 ```
 
 出力項目:
@@ -220,7 +220,7 @@ terraform-docs-cli module search --query vpc [--offset 0] [--limit 20]
 #### 6.2.2 `module get`
 
 ```text
-terraform-docs-cli module get --id terraform-aws-modules/vpc/aws/6.0.1
+terraform-docs-cli module get -id terraform-aws-modules/vpc/aws/6.0.1
 ```
 
 入力制約:
@@ -231,9 +231,9 @@ terraform-docs-cli module get --id terraform-aws-modules/vpc/aws/6.0.1
 
 ```text
 terraform-docs-cli module latest-version \
-  --publisher terraform-aws-modules \
-  --name vpc \
-  --provider aws
+  -publisher terraform-aws-modules \
+  -name vpc \
+  -provider aws
 ```
 
 ### 6.3 Policy
@@ -241,7 +241,7 @@ terraform-docs-cli module latest-version \
 #### 6.3.1 `policy search`
 
 ```text
-terraform-docs-cli policy search --query cis
+terraform-docs-cli policy search -query cis
 ```
 
 出力項目:
@@ -254,7 +254,7 @@ terraform-docs-cli policy search --query cis
 #### 6.3.2 `policy get`
 
 ```text
-terraform-docs-cli policy get --id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
+terraform-docs-cli policy get -id policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1
 ```
 
 ### 6.4 Guide
@@ -262,16 +262,16 @@ terraform-docs-cli policy get --id policies/hashicorp/CIS-Policy-Set-for-AWS-Ter
 #### 6.4.1 `guide style`
 
 ```text
-terraform-docs-cli guide style [--output markdown]
+terraform-docs-cli guide style [-output markdown]
 ```
 
 #### 6.4.2 `guide module-dev`
 
 ```text
-terraform-docs-cli guide module-dev [--section all]
+terraform-docs-cli guide module-dev [-section all]
 ```
 
-`--section`:
+`-section`:
 
 - `all|index|composition|structure|providers|publish|refactoring`
 
@@ -334,7 +334,7 @@ terraform-docs-cli guide module-dev [--section all]
 ## 9. エラーハンドリング
 
 - エラーメッセージは標準エラー出力へ出す
-- `--debug` 有効時は HTTP ステータス、URL、retry 情報を追加
+- `-debug` 有効時は HTTP ステータス、URL、retry 情報を追加
 - `404` は終了コード `2` にマップ
 - `429/5xx` は retry 後に失敗した場合終了コード `3`
 
@@ -371,9 +371,9 @@ internal/output/        # stdout/file writer
   - `policy search|get`
   - `guide style|module-dev`
 - キャッシュキーは「HTTPメソッド + 正規化済みURL + 主要クエリ + 出力非依存データ」で構成する
-- `--output` は表示のみのためキャッシュキーには含めない
+- `-output` は表示のみのためキャッシュキーには含めない
 - TTL を超過したエントリはミスとして再取得し、取得成功後に上書きする
-- `--no-cache` 指定時は read/write ともに無効化する
+- `-no-cache` 指定時は read/write ともに無効化する
 - キャッシュ破損時は当該エントリを破棄して再取得し、処理は継続する
 
 ## 11. テスト仕様
@@ -391,9 +391,9 @@ internal/output/        # stdout/file writer
 - not found ケース
 - API エラーケース（5xx / timeout）
 - キャッシュ hit / miss / TTL 期限切れ
-- `--no-cache` 時に read/write されないこと
+- `-no-cache` 時に read/write されないこと
 - `provider export` が期待ディレクトリ構造で出力されること
-- `provider export --clean` が再生成動作になること
+- `provider export -clean` が再生成動作になること
 
 ### 11.3 スナップショットテスト
 

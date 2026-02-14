@@ -209,9 +209,9 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 				}
 				if existing, exists := pathOwners[filePath]; exists {
 					if existing == reservedManifestPathOwner {
-						return nil, &ValidationError{Message: fmt.Sprintf("path collision detected in --path-template: %s conflicts with reserved manifest path", filePath)}
+						return nil, &ValidationError{Message: fmt.Sprintf("path collision detected in -path-template: %s conflicts with reserved manifest path", filePath)}
 					}
-					return nil, &ValidationError{Message: fmt.Sprintf("path collision detected in --path-template: %s (doc_id=%s conflicts with doc_id=%s)", filePath, existing, detail.Data.ID)}
+					return nil, &ValidationError{Message: fmt.Sprintf("path collision detected in -path-template: %s (doc_id=%s conflicts with doc_id=%s)", filePath, existing, detail.Data.ID)}
 				}
 				pathOwners[filePath] = detail.Data.ID
 
@@ -257,7 +257,7 @@ func ExportDocs(ctx context.Context, client APIClient, opts ExportOptions) (*Exp
 		}
 		for _, target := range cleanTargets {
 			if err := ensureNoSymlinkTraversal(opts.OutDir, target); err != nil {
-				return nil, &ValidationError{Message: fmt.Sprintf("unsafe --clean target %s: %v", target, err)}
+				return nil, &ValidationError{Message: fmt.Sprintf("unsafe -clean target %s: %v", target, err)}
 			}
 			if err := os.RemoveAll(target); err != nil {
 				return nil, &WriteError{Path: target, Err: err}
@@ -315,16 +315,16 @@ func validateExportOptions(opts *ExportOptions) error {
 		opts.Namespace = "hashicorp"
 	}
 	if opts.Name == "" {
-		return &ValidationError{Message: "--name is required"}
+		return &ValidationError{Message: "-name is required"}
 	}
 	if opts.Version == "" {
-		return &ValidationError{Message: "--version is required"}
+		return &ValidationError{Message: "-version is required"}
 	}
 	if opts.Format == "" {
 		opts.Format = "markdown"
 	}
 	if opts.OutDir == "" {
-		return &ValidationError{Message: "--out-dir is required"}
+		return &ValidationError{Message: "-out-dir is required"}
 	}
 	if opts.PathTemplate == "" {
 		opts.PathTemplate = DefaultPathTemplate
@@ -332,7 +332,7 @@ func validateExportOptions(opts *ExportOptions) error {
 
 	outAbs, err := filepath.Abs(opts.OutDir)
 	if err != nil {
-		return &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
+		return &ValidationError{Message: fmt.Sprintf("invalid -out-dir: %v", err)}
 	}
 	opts.OutDir = outAbs
 
@@ -442,7 +442,7 @@ func getProviderDocDetail(ctx context.Context, client APIClient, docID string, r
 		if !requireRaw {
 			return detail, nil, nil
 		}
-		// Re-read raw after successful recovery so --format json preserves
+		// Re-read raw after successful recovery so -format json preserves
 		// fields that are not represented in providerDocDetailResponse.
 		recoveredRaw, getErr := client.Get(ctx, path)
 		if getErr != nil {
@@ -528,7 +528,7 @@ func deriveCleanTargets(opts ExportOptions, ext string) ([]string, error) {
 	targets := make([]string, 0, len(targetSet))
 	for target := range targetSet {
 		if target == opts.OutDir {
-			return nil, &ValidationError{Message: "--clean template resolves to --out-dir root, which is too broad"}
+			return nil, &ValidationError{Message: "-clean template resolves to -out-dir root, which is too broad"}
 		}
 		targets = append(targets, target)
 	}
@@ -580,7 +580,7 @@ func isCleanRootScopedToProviderVersion(rootAbs string, opts ExportOptions) bool
 func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
 	outAbs, err := filepath.Abs(opts.OutDir)
 	if err != nil {
-		return "", &ValidationError{Message: fmt.Sprintf("invalid --out-dir: %v", err)}
+		return "", &ValidationError{Message: fmt.Sprintf("invalid -out-dir: %v", err)}
 	}
 
 	known := map[string]string{
@@ -607,7 +607,7 @@ func deriveTemplateRoot(opts ExportOptions, ext string) (string, error) {
 	}
 
 	if !isPathWithinDir(outAbs, rootAbs) {
-		return "", &ValidationError{Message: "derived clean root is outside --out-dir"}
+		return "", &ValidationError{Message: "derived clean root is outside -out-dir"}
 	}
 	return rootAbs, nil
 }
@@ -647,7 +647,7 @@ func validatePathTemplate(opts ExportOptions, ext string) error {
 		return &ValidationError{Message: err.Error()}
 	}
 	if filePath == manifestPathForOptions(opts) {
-		return &ValidationError{Message: fmt.Sprintf("path collision detected in --path-template: %s conflicts with reserved manifest path", filePath)}
+		return &ValidationError{Message: fmt.Sprintf("path collision detected in -path-template: %s conflicts with reserved manifest path", filePath)}
 	}
 	return nil
 }
