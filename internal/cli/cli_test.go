@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestExecute_UnknownProviderExportFlagReturnsExitCode1(t *testing.T) {
 	code := Execute([]string{
 		"provider", "export",
 		"-unknown",
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
 	}
@@ -72,7 +73,7 @@ func TestExecute_ProviderExportExtraArgsReturnsExitCode1(t *testing.T) {
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
 		"extra",
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -89,7 +90,7 @@ func TestExecute_InvalidRegistryURLReturnsExitCode1(t *testing.T) {
 		"-name", "aws",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -103,7 +104,7 @@ func TestExecute_UnsupportedRegistryURLSchemeReturnsExitCode1(t *testing.T) {
 		"-name", "aws",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -122,7 +123,7 @@ func TestExecute_CacheInitFailureReturnsExitCode4(t *testing.T) {
 		"-name", "aws",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 4 {
 		t.Fatalf("expected exit code 4, got %d; stderr=%s", code, errOut.String())
 	}
@@ -143,7 +144,7 @@ func TestExecute_ValidationPrecedesCacheInit(t *testing.T) {
 		"provider", "export",
 		"-version", "6.31.0",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
@@ -191,7 +192,7 @@ func TestExecute_LockfileNotFoundReturnsError(t *testing.T) {
 		"-chdir", "/nonexistent",
 		"provider", "export",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit code for missing lockfile")
 	}
@@ -218,7 +219,7 @@ provider "registry.terraform.io/hashicorp/null" {
 		"-chdir", projDir,
 		"provider", "export",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	// Exit code should NOT be 1 (validation error) - it should be a network/registry error (code 3).
 	// If lockfile wasn't found, we'd get a validation error about -name being required.
 	if code == 1 && strings.Contains(errOut.String(), "-name is required") {
@@ -243,7 +244,7 @@ provider "registry.terraform.io/hashicorp/aws" {
 		"provider", "export",
 		"-name", "nonexistent",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 2 {
 		t.Fatalf("expected exit code 2 (not found), got %d; stderr=%s", code, errOut.String())
 	}
@@ -270,7 +271,7 @@ provider "registry.terraform.io/hashicorp/null" {
 		"provider", "export",
 		"-version", "ignored",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if !strings.Contains(errOut.String(), "-version is ignored") {
 		t.Fatalf("expected -version warning, got stderr: %s", errOut.String())
 	}
@@ -287,7 +288,7 @@ func TestExecute_LockfileEmptyReturnsError(t *testing.T) {
 		"-chdir", projDir,
 		"provider", "export",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d; stderr=%s", code, errOut.String())
 	}
@@ -302,7 +303,7 @@ func TestExecute_LegacyModeStillRequiresName(t *testing.T) {
 		"provider", "export",
 		"-version", "5.31.0",
 		"-out-dir", t.TempDir(),
-	}, &errOut)
+	}, io.Discard, &errOut)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d; stderr=%s", code, errOut.String())
 	}
