@@ -12,7 +12,11 @@ import (
 	"time"
 
 	"github.com/mkusaka/tfdc/internal/cache"
+	"github.com/mkusaka/tfdc/internal/guide"
 	"github.com/mkusaka/tfdc/internal/lockfile"
+	"github.com/mkusaka/tfdc/internal/module"
+	"github.com/mkusaka/tfdc/internal/output"
+	"github.com/mkusaka/tfdc/internal/policy"
 	"github.com/mkusaka/tfdc/internal/progress"
 	"github.com/mkusaka/tfdc/internal/provider"
 	"github.com/mkusaka/tfdc/internal/registry"
@@ -42,7 +46,7 @@ func (e *CacheInitError) Error() string {
 
 func (e *CacheInitError) Unwrap() error { return e.Err }
 
-func Execute(args []string, stderr io.Writer) int {
+func Execute(args []string, stdout, stderr io.Writer) int {
 	g, rest, err := parseGlobalFlags(args)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -60,25 +64,425 @@ func Execute(args []string, stderr io.Writer) int {
 
 	switch group {
 	case "provider":
-		switch cmd {
-		case "export":
-			summaries, runErr := runProviderExport(ctx, g, subArgs, stderr)
-			if runErr != nil {
-				code := mapErrorToExitCode(runErr)
-				_, _ = fmt.Fprintln(stderr, runErr)
-				return code
-			}
-			printSummaries(summaries, stderr)
-			return 0
-		default:
-			_, _ = fmt.Fprintf(stderr, "unsupported provider command: %s\n", cmd)
-			return 1
-		}
+		return runProvider(ctx, g, cmd, subArgs, stdout, stderr)
+	case "module":
+		return runModule(ctx, g, cmd, subArgs, stdout, stderr)
+	case "policy":
+		return runPolicy(ctx, g, cmd, subArgs, stdout, stderr)
+	case "guide":
+		return runGuide(ctx, g, cmd, subArgs, stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unsupported command group: %s\n", group)
 		printUsage(stderr)
 		return 1
 	}
+}
+
+func runProvider(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
+	switch cmd {
+	case "export":
+		summaries, runErr := runProviderExport(ctx, g, subArgs, stderr)
+		if runErr != nil {
+			code := mapErrorToExitCode(runErr)
+			_, _ = fmt.Fprintln(stderr, runErr)
+			return code
+		}
+		printSummaries(summaries, stderr)
+		return 0
+	case "search":
+		if err := runProviderSearch(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	case "get":
+		if err := runProviderGet(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	default:
+		_, _ = fmt.Fprintf(stderr, "unsupported provider command: %s\n", cmd)
+		return 1
+	}
+}
+
+func runProviderSearch(ctx context.Context, g globalFlags, args []string, stdout, stderr io.Writer) error {
+	var name, namespace, service, typ, version, format string
+	var limit int
+
+	fs := flag.NewFlagSet("provider search", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&name, "name", "", "provider name")
+	fs.StringVar(&namespace, "namespace", "hashicorp", "provider namespace")
+	fs.StringVar(&service, "service", "", "slug-like search token")
+	fs.StringVar(&typ, "type", "", "doc type: resources|data-sources|...")
+	fs.StringVar(&version, "version", "latest", "provider version or latest")
+	fs.IntVar(&limit, "limit", 20, "max results")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	results, err := provider.SearchDocs(ctx, client, provider.SearchOptions{
+		Name:      name,
+		Namespace: namespace,
+		Service:   service,
+		Type:      typ,
+		Version:   version,
+		Limit:     limit,
+	})
+	if err != nil {
+		return err
+	}
+
+	items := make([]map[string]any, len(results))
+	for i, r := range results {
+		items[i] = map[string]any{
+			"provider_doc_id": r.ProviderDocID,
+			"title":           r.Title,
+			"category":        r.Category,
+			"description":     r.Slug,
+			"provider":        r.Provider,
+			"namespace":       r.Namespace,
+			"version":         r.Version,
+		}
+	}
+	columns := []string{"provider_doc_id", "title", "category", "description", "provider", "namespace", "version"}
+	return output.WriteSearch(stdout, format, items, len(items), columns)
+}
+
+func runProviderGet(ctx context.Context, g globalFlags, args []string, stdout, stderr io.Writer) error {
+	var docID, format string
+
+	fs := flag.NewFlagSet("provider get", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&docID, "doc-id", "", "numeric provider doc ID")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	result, err := provider.GetDoc(ctx, client, docID)
+	if err != nil {
+		return err
+	}
+
+	return output.WriteDetail(stdout, format, result.ID, result.Content, result.ContentType)
+}
+
+func runModule(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
+	switch cmd {
+	case "search":
+		if err := runModuleSearch(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	case "get":
+		if err := runModuleGet(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	default:
+		_, _ = fmt.Fprintf(stderr, "unsupported module command: %s\n", cmd)
+		return 1
+	}
+}
+
+func runModuleSearch(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
+	var query, format string
+	var offset, limit int
+
+	fs := flag.NewFlagSet("module search", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&query, "query", "", "search query")
+	fs.IntVar(&offset, "offset", 0, "result offset")
+	fs.IntVar(&limit, "limit", 20, "max results")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	results, total, err := module.SearchModules(ctx, client, module.SearchOptions{
+		Query:  query,
+		Offset: offset,
+		Limit:  limit,
+	})
+	if err != nil {
+		return wrapModuleError(err)
+	}
+
+	items := make([]map[string]any, len(results))
+	for i, r := range results {
+		items[i] = map[string]any{
+			"module_id":    r.ModuleID,
+			"name":         r.Name,
+			"description":  r.Description,
+			"downloads":    r.Downloads,
+			"verified":     r.Verified,
+			"published_at": r.PublishedAt,
+		}
+	}
+	columns := []string{"module_id", "name", "description", "downloads", "verified", "published_at"}
+	return output.WriteSearch(stdout, format, items, total, columns)
+}
+
+func runModuleGet(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
+	var id, format string
+
+	fs := flag.NewFlagSet("module get", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&id, "id", "", "module ID (namespace/name/provider/version)")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	result, err := module.GetModule(ctx, client, id)
+	if err != nil {
+		return wrapModuleError(err)
+	}
+
+	return output.WriteDetail(stdout, format, result.ID, result.Content, "text/markdown")
+}
+
+// wrapModuleError converts module package errors to provider package errors
+// so that mapErrorToExitCode works correctly.
+func wrapModuleError(err error) error {
+	var mvErr *module.ValidationError
+	if errors.As(err, &mvErr) {
+		return &provider.ValidationError{Message: mvErr.Message}
+	}
+	return err
+}
+
+func runPolicy(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
+	switch cmd {
+	case "search":
+		if err := runPolicySearch(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	case "get":
+		if err := runPolicyGet(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	default:
+		_, _ = fmt.Fprintf(stderr, "unsupported policy command: %s\n", cmd)
+		return 1
+	}
+}
+
+func runPolicySearch(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
+	var query, format string
+
+	fs := flag.NewFlagSet("policy search", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&query, "query", "", "search query")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	results, total, err := policy.SearchPolicies(ctx, client, query)
+	if err != nil {
+		return wrapPolicyError(err)
+	}
+
+	items := make([]map[string]any, len(results))
+	for i, r := range results {
+		items[i] = map[string]any{
+			"terraform_policy_id": r.TerraformPolicyID,
+			"name":                r.Name,
+			"title":               r.Title,
+			"downloads":           r.Downloads,
+		}
+	}
+	columns := []string{"terraform_policy_id", "name", "title", "downloads"}
+	return output.WriteSearch(stdout, format, items, total, columns)
+}
+
+func runPolicyGet(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
+	var id, format string
+
+	fs := flag.NewFlagSet("policy get", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&id, "id", "", "policy ID (policies/namespace/name/version)")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	result, err := policy.GetPolicy(ctx, client, id)
+	if err != nil {
+		return wrapPolicyError(err)
+	}
+
+	return output.WriteDetail(stdout, format, result.ID, result.Content, "text/markdown")
+}
+
+// wrapPolicyError converts policy package errors to provider package errors.
+func wrapPolicyError(err error) error {
+	var pvErr *policy.ValidationError
+	if errors.As(err, &pvErr) {
+		return &provider.ValidationError{Message: pvErr.Message}
+	}
+	return err
+}
+
+func runGuide(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
+	switch cmd {
+	case "style":
+		if err := runGuideStyle(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	case "module-dev":
+		if err := runGuideModuleDev(ctx, g, subArgs, stdout, stderr); err != nil {
+			code := mapErrorToExitCode(err)
+			_, _ = fmt.Fprintln(stderr, err)
+			return code
+		}
+		return 0
+	default:
+		_, _ = fmt.Fprintf(stderr, "unsupported guide command: %s\n", cmd)
+		return 1
+	}
+}
+
+func runGuideStyle(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
+	var format string
+
+	fs := flag.NewFlagSet("guide style", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	content, err := guide.FetchStyleGuide(ctx, client)
+	if err != nil {
+		return err
+	}
+
+	return output.WriteDetail(stdout, format, "style-guide", content, "text/markdown")
+}
+
+func runGuideModuleDev(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
+	var section, format string
+
+	fs := flag.NewFlagSet("guide module-dev", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&section, "section", "all", "section: all|index|composition|structure|providers|publish|refactoring")
+	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
+
+	if err := fs.Parse(args); err != nil {
+		return &provider.ValidationError{Message: err.Error()}
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return &provider.ValidationError{Message: fmt.Sprintf("unexpected positional arguments: %s", strings.Join(extra, ", "))}
+	}
+
+	client, err := buildRegistryClient(g)
+	if err != nil {
+		return err
+	}
+
+	content, err := guide.FetchModuleDevGuide(ctx, client, section)
+	if err != nil {
+		return wrapGuideError(err)
+	}
+
+	id := "module-dev"
+	if section != "all" && section != "" {
+		id = "module-dev/" + section
+	}
+	return output.WriteDetail(stdout, format, id, content, "text/markdown")
+}
+
+// wrapGuideError converts guide package errors to provider package errors.
+func wrapGuideError(err error) error {
+	var gvErr *guide.ValidationError
+	if errors.As(err, &gvErr) {
+		return &provider.ValidationError{Message: gvErr.Message}
+	}
+	return err
 }
 
 func parseGlobalFlags(args []string) (globalFlags, []string, error) {
@@ -296,6 +700,11 @@ func mapErrorToExitCode(err error) int {
 		return 1
 	}
 
+	var fErr *output.FormatError
+	if errors.As(err, &fErr) {
+		return 1
+	}
+
 	var nfErr *provider.NotFoundError
 	if errors.As(err, &nfErr) {
 		return 2
@@ -328,7 +737,12 @@ func mapErrorToExitCode(err error) int {
 }
 
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "usage: tfdc [global flags] provider export [flags]")
+	_, _ = fmt.Fprintln(w, `usage: tfdc [global flags] <group> <command> [flags]
+
+  provider  search | get | export
+  module    search | get
+  policy    search | get
+  guide     style | module-dev`)
 }
 
 func expandHomeDir(path string) (string, error) {

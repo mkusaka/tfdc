@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	code := cli.Execute(os.Args[1:], os.Stderr)
+	code := cli.Execute(os.Args[1:], os.Stdout, os.Stderr)
 	os.Exit(code)
 }
