@@ -700,6 +700,11 @@ func mapErrorToExitCode(err error) int {
 		return 1
 	}
 
+	var fErr *output.FormatError
+	if errors.As(err, &fErr) {
+		return 1
+	}
+
 	var nfErr *provider.NotFoundError
 	if errors.As(err, &nfErr) {
 		return 2

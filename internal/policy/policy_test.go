@@ -13,40 +13,46 @@ type fakePolicyClient struct{}
 
 func (f *fakePolicyClient) GetJSON(_ context.Context, path string, dst any) error {
 	if strings.HasPrefix(path, "/v2/policies?") {
-		b, _ := json.Marshal(map[string]any{
-			"data": []map[string]any{
-				{
-					"id": "1",
-					"attributes": map[string]any{
-						"name":      "CIS-Policy-Set-for-AWS-Terraform",
-						"title":     "CIS Policy Set for AWS Terraform",
-						"downloads": 1000,
+		// Only page 1 returns data; page 2+ returns empty (pagination stop).
+		if strings.Contains(path, "page[number]=1") || !strings.Contains(path, "page[number]=") {
+			b, _ := json.Marshal(map[string]any{
+				"data": []map[string]any{
+					{
+						"id": "1",
+						"attributes": map[string]any{
+							"name":      "CIS-Policy-Set-for-AWS-Terraform",
+							"title":     "CIS Policy Set for AWS Terraform",
+							"downloads": 1000,
+						},
+						"relationships": map[string]any{
+							"latest-version": map[string]any{
+								"links": map[string]any{
+									"related": "/v2/policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1",
+								},
+							},
+						},
 					},
-					"relationships": map[string]any{
-						"latest-version": map[string]any{
-							"links": map[string]any{
-								"related": "/v2/policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1",
+					{
+						"id": "2",
+						"attributes": map[string]any{
+							"name":      "GCP-Networking-Policy",
+							"title":     "GCP Networking Policy",
+							"downloads": 500,
+						},
+						"relationships": map[string]any{
+							"latest-version": map[string]any{
+								"links": map[string]any{
+									"related": "/v2/policies/hashicorp/GCP-Networking-Policy/2.0.0",
+								},
 							},
 						},
 					},
 				},
-				{
-					"id": "2",
-					"attributes": map[string]any{
-						"name":      "GCP-Networking-Policy",
-						"title":     "GCP Networking Policy",
-						"downloads": 500,
-					},
-					"relationships": map[string]any{
-						"latest-version": map[string]any{
-							"links": map[string]any{
-								"related": "/v2/policies/hashicorp/GCP-Networking-Policy/2.0.0",
-							},
-						},
-					},
-				},
-			},
-		})
+			})
+			return json.Unmarshal(b, dst)
+		}
+		// Subsequent pages return empty data.
+		b, _ := json.Marshal(map[string]any{"data": []map[string]any{}})
 		return json.Unmarshal(b, dst)
 	}
 	return fmt.Errorf("unexpected GetJSON path: %s", path)

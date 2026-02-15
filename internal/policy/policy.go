@@ -59,37 +59,46 @@ type v2PolicyDetailResponse struct {
 }
 
 // SearchPolicies searches for policies matching the query.
-// It fetches all policies and filters client-side.
+// It fetches all policies (paginated) and filters client-side.
 func SearchPolicies(ctx context.Context, client APIClient, query string) ([]SearchResult, int, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, 0, &ValidationError{Message: "-query is required"}
 	}
 
-	var resp v2PoliciesResponse
-	if err := client.GetJSON(ctx, "/v2/policies?page[size]=100&include=latest-version", &resp); err != nil {
-		return nil, 0, err
-	}
-
 	lowerQuery := strings.ToLower(query)
 	var results []SearchResult
-	for _, p := range resp.Data {
-		if !strings.Contains(strings.ToLower(p.Attributes.Name), lowerQuery) &&
-			!strings.Contains(strings.ToLower(p.Attributes.Title), lowerQuery) {
-			continue
+	for page := 1; ; page++ {
+		path := fmt.Sprintf("/v2/policies?page[size]=100&page[number]=%d&include=latest-version", page)
+		var resp v2PoliciesResponse
+		if err := client.GetJSON(ctx, path, &resp); err != nil {
+			return nil, 0, err
+		}
+		if len(resp.Data) == 0 {
+			break
 		}
 
-		policyID := extractPolicyID(p.Relationships.LatestVersion.Links.Related)
-		if policyID == "" {
-			policyID = p.ID
-		}
+		for _, p := range resp.Data {
+			if !strings.Contains(strings.ToLower(p.Attributes.Name), lowerQuery) &&
+				!strings.Contains(strings.ToLower(p.Attributes.Title), lowerQuery) {
+				continue
+			}
 
-		results = append(results, SearchResult{
-			TerraformPolicyID: policyID,
-			Name:              p.Attributes.Name,
-			Title:             p.Attributes.Title,
-			Downloads:         p.Attributes.Downloads,
-		})
+			policyID := extractPolicyID(p.Relationships.LatestVersion.Links.Related)
+			if policyID == "" {
+				policyID = p.ID
+				if !strings.HasPrefix(policyID, "policies/") {
+					policyID = "policies/" + policyID
+				}
+			}
+
+			results = append(results, SearchResult{
+				TerraformPolicyID: policyID,
+				Name:              p.Attributes.Name,
+				Title:             p.Attributes.Title,
+				Downloads:         p.Attributes.Downloads,
+			})
+		}
 	}
 	return results, len(results), nil
 }

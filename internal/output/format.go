@@ -21,6 +21,15 @@ type DetailResult struct {
 	ContentType string `json:"content_type"`
 }
 
+// FormatError indicates an unsupported output format.
+type FormatError struct {
+	Format string
+}
+
+func (e *FormatError) Error() string {
+	return fmt.Sprintf("unsupported format: %s", e.Format)
+}
+
 // WriteSearch writes search results to w in the given format.
 // columns controls the order and selection of fields for text/markdown output.
 func WriteSearch(w io.Writer, format string, items []map[string]any, total int, columns []string) error {
@@ -32,7 +41,7 @@ func WriteSearch(w io.Writer, format string, items []map[string]any, total int, 
 	case "markdown":
 		return writeMarkdownTable(w, items, columns)
 	default:
-		return fmt.Errorf("unsupported format: %s", format)
+		return &FormatError{Format: format}
 	}
 }
 
@@ -45,7 +54,7 @@ func WriteDetail(w io.Writer, format string, id, content, contentType string) er
 		_, err := fmt.Fprint(w, content)
 		return err
 	default:
-		return fmt.Errorf("unsupported format: %s", format)
+		return &FormatError{Format: format}
 	}
 }
 
