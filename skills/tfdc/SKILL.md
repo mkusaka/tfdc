@@ -1,94 +1,44 @@
 ---
 name: tfdc
-description: Export Terraform provider documentation from the public registry to local files using the tfdc CLI. Use when you need to fetch, read, or reference Terraform provider docs (resources, data sources, guides, etc.) for any provider and version. Triggers on requests like "get Terraform docs", "export provider documentation", "fetch AWS provider resources docs", or when working with Terraform infrastructure that needs provider documentation locally.
+description: Retrieve Terraform documentation from the public registry using the tfdc CLI. Supports provider doc search/get/export, module search/get, policy search/get, and Terraform style/module-dev guides. Use when you need to find, read, or export Terraform provider docs, module docs, policy docs, or development guides.
 ---
 
 # tfdc
 
-## Overview
+tfdc retrieves Terraform documentation from the public Terraform Registry and official HashiCorp docs.
 
-tfdc fetches Terraform provider documentation from the public registry and writes it to local files. Only `provider export` is currently implemented.
+## Available commands
 
-## Quick Start
+| Command | Description |
+|---|---|
+| `provider search` | Search provider docs by service slug, returns `provider_doc_id` list |
+| `provider get` | Fetch full provider doc content by `provider_doc_id` |
+| `provider export` | Bulk export all docs for a provider version to local files |
+| `module search` | Search the Terraform module registry |
+| `module get` | Fetch module details by module ID |
+| `policy search` | Search Terraform policy sets |
+| `policy get` | Fetch policy details by policy ID |
+| `guide style` | Fetch Terraform style guide |
+| `guide module-dev` | Fetch module development guide |
 
-Export a single provider's docs:
+## Workflow
 
-```bash
-tfdc provider export -name aws -version 6.31.0 -out-dir ./terraform-docs
-```
-
-Export all providers from a lockfile:
-
-```bash
-tfdc -chdir=./infra provider export -out-dir ./terraform-docs
-```
-
-Read an exported doc:
-
-```bash
-cat ./terraform-docs/terraform/hashicorp/aws/6.31.0/docs/resources/instance.md
-```
-
-## provider export
-
-Two modes are available.
-
-### Legacy mode (single provider)
+Provider, module, and policy docs use a two-step search-then-get flow:
 
 ```bash
-tfdc provider export \
-  -name aws \
-  -version 6.31.0 \
-  -out-dir ./docs
+# Step 1: Find doc IDs
+tfdc provider search -name aws -service ec2 -type resources -format json
+
+# Step 2: Fetch full content by ID
+tfdc provider get -doc-id 10595066
 ```
 
-Required: `-name`, `-version`, `-out-dir`
+## Output formats
 
-### Lockfile mode (multi-provider)
+All search/get/guide commands support `-format text|json|markdown` (default: `text`).
 
-```bash
-tfdc -chdir=./infra provider export -out-dir ./docs
-```
-
-Required: `-chdir` (global flag), `-out-dir`
-
-Detects `.terraform.lock.hcl` in the `-chdir` directory and exports all listed providers. Filter to one provider with `-name`:
-
-```bash
-tfdc -chdir=./infra provider export -name aws -out-dir ./docs
-```
-
-### Optional flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `-namespace` | `hashicorp` | Provider namespace |
-| `-format` | `markdown` | Output format (`markdown` or `json`) |
-| `-categories` | `all` | Categories to export (comma-separated) |
-| `-path-template` | See below | Output path template |
-| `-clean` | off | Remove previous export before writing |
-
-### Output layout
-
-Default template: `{out}/terraform/{namespace}/{provider}/{version}/docs/{category}/{slug}.{ext}`
-
-Example output: `docs/terraform/hashicorp/aws/6.31.0/docs/resources/instance.md`
-
-Manifest: `docs/terraform/hashicorp/aws/6.31.0/docs/_manifest.json`
-
-### Categories
-
-`-categories all` expands to: `resources`, `data-sources`, `ephemeral-resources`, `functions`, `guides`, `overview`, `actions`, `list-resources`
-
-Export specific categories:
-
-```bash
-tfdc provider export -name aws -version 6.31.0 -out-dir ./docs -categories resources,data-sources
-```
-
-### Path template placeholders
-
-`{out}`, `{namespace}`, `{provider}`, `{version}`, `{category}`, `{slug}`, `{doc_id}`, `{ext}`
+Search JSON: `{ "items": [...], "total": N }`
+Detail JSON: `{ "id": "...", "content": "...", "content_type": "text/markdown" }`
 
 ## Global flags
 
@@ -114,3 +64,7 @@ tfdc provider export -name aws -version 6.31.0 -out-dir ./docs -categories resou
 | `2` | Not found |
 | `3` | Remote API error |
 | `4` | File write or serialization error |
+
+## Individual skill details
+
+For detailed usage of each command, see the individual skills: `tfdc-provider-search`, `tfdc-provider-get`, `tfdc-provider-export`, `tfdc-module-search`, `tfdc-module-get`, `tfdc-policy-search`, `tfdc-policy-get`, `tfdc-guide-style`, `tfdc-guide-module-dev`.
