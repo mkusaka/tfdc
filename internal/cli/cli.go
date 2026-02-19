@@ -82,11 +82,31 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// handleSubcmdResult maps the error returned by a subcommand to an exit code.
+// flag.ErrHelp means help was already printed to stdout; exit 0.
+func handleSubcmdResult(err error, stderr io.Writer) int {
+	if err == nil {
+		return 0
+	}
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	code := mapErrorToExitCode(err)
+	_, _ = fmt.Fprintln(stderr, err)
+	return code
+}
+
 func runProvider(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
 	switch cmd {
+	case "--help", "-h":
+		_, _ = fmt.Fprintln(stdout, "usage: tfdc [global flags] provider <command> [flags]\n\ncommands:\n  search   search provider documentation\n  get      fetch a provider doc by ID\n  export   export provider docs to files")
+		return 0
 	case "export":
-		summaries, runErr := runProviderExport(ctx, g, subArgs, stderr)
+		summaries, runErr := runProviderExport(ctx, g, subArgs, stdout, stderr)
 		if runErr != nil {
+			if errors.Is(runErr, flag.ErrHelp) {
+				return 0
+			}
 			code := mapErrorToExitCode(runErr)
 			_, _ = fmt.Fprintln(stderr, runErr)
 			return code
@@ -94,31 +114,21 @@ func runProvider(ctx context.Context, g globalFlags, cmd string, subArgs []strin
 		printSummaries(summaries, stderr)
 		return 0
 	case "search":
-		if err := runProviderSearch(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runProviderSearch(ctx, g, subArgs, stdout, stderr), stderr)
 	case "get":
-		if err := runProviderGet(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runProviderGet(ctx, g, subArgs, stdout, stderr), stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unsupported provider command: %s\n", cmd)
 		return 1
 	}
 }
 
-func runProviderSearch(ctx context.Context, g globalFlags, args []string, stdout, stderr io.Writer) error {
+func runProviderSearch(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
 	var name, namespace, service, typ, version, format string
 	var limit int
 
 	fs := flag.NewFlagSet("provider search", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&name, "name", "", "provider name")
 	fs.StringVar(&namespace, "namespace", "hashicorp", "provider namespace")
 	fs.StringVar(&service, "service", "", "slug-like search token")
@@ -128,6 +138,9 @@ func runProviderSearch(ctx context.Context, g globalFlags, args []string, stdout
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -167,15 +180,18 @@ func runProviderSearch(ctx context.Context, g globalFlags, args []string, stdout
 	return output.WriteSearch(stdout, format, items, len(items), columns)
 }
 
-func runProviderGet(ctx context.Context, g globalFlags, args []string, stdout, stderr io.Writer) error {
+func runProviderGet(ctx context.Context, g globalFlags, args []string, stdout, _ io.Writer) error {
 	var docID, format string
 
 	fs := flag.NewFlagSet("provider get", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&docID, "doc-id", "", "numeric provider doc ID")
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -197,20 +213,13 @@ func runProviderGet(ctx context.Context, g globalFlags, args []string, stdout, s
 
 func runModule(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
 	switch cmd {
+	case "--help", "-h":
+		_, _ = fmt.Fprintln(stdout, "usage: tfdc [global flags] module <command> [flags]\n\ncommands:\n  search   search modules\n  get      fetch a module by ID")
+		return 0
 	case "search":
-		if err := runModuleSearch(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runModuleSearch(ctx, g, subArgs, stdout, stderr), stderr)
 	case "get":
-		if err := runModuleGet(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runModuleGet(ctx, g, subArgs, stdout, stderr), stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unsupported module command: %s\n", cmd)
 		return 1
@@ -222,13 +231,16 @@ func runModuleSearch(ctx context.Context, g globalFlags, args []string, stdout, 
 	var offset, limit int
 
 	fs := flag.NewFlagSet("module search", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&query, "query", "", "search query")
 	fs.IntVar(&offset, "offset", 0, "result offset")
 	fs.IntVar(&limit, "limit", 20, "max results")
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -268,11 +280,14 @@ func runModuleGet(ctx context.Context, g globalFlags, args []string, stdout, _ i
 	var id, format string
 
 	fs := flag.NewFlagSet("module get", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&id, "id", "", "module ID (namespace/name/provider/version)")
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -304,20 +319,13 @@ func wrapModuleError(err error) error {
 
 func runPolicy(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
 	switch cmd {
+	case "--help", "-h":
+		_, _ = fmt.Fprintln(stdout, "usage: tfdc [global flags] policy <command> [flags]\n\ncommands:\n  search   search policy libraries\n  get      fetch a policy by ID")
+		return 0
 	case "search":
-		if err := runPolicySearch(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runPolicySearch(ctx, g, subArgs, stdout, stderr), stderr)
 	case "get":
-		if err := runPolicyGet(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runPolicyGet(ctx, g, subArgs, stdout, stderr), stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unsupported policy command: %s\n", cmd)
 		return 1
@@ -328,11 +336,14 @@ func runPolicySearch(ctx context.Context, g globalFlags, args []string, stdout, 
 	var query, format string
 
 	fs := flag.NewFlagSet("policy search", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&query, "query", "", "search query")
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -366,11 +377,14 @@ func runPolicyGet(ctx context.Context, g globalFlags, args []string, stdout, _ i
 	var id, format string
 
 	fs := flag.NewFlagSet("policy get", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&id, "id", "", "policy ID (policies/namespace/name/version)")
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -401,20 +415,13 @@ func wrapPolicyError(err error) error {
 
 func runGuide(ctx context.Context, g globalFlags, cmd string, subArgs []string, stdout, stderr io.Writer) int {
 	switch cmd {
+	case "--help", "-h":
+		_, _ = fmt.Fprintln(stdout, "usage: tfdc [global flags] guide <command> [flags]\n\ncommands:\n  style       fetch the Terraform style guide\n  module-dev  fetch the module development guide")
+		return 0
 	case "style":
-		if err := runGuideStyle(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runGuideStyle(ctx, g, subArgs, stdout, stderr), stderr)
 	case "module-dev":
-		if err := runGuideModuleDev(ctx, g, subArgs, stdout, stderr); err != nil {
-			code := mapErrorToExitCode(err)
-			_, _ = fmt.Fprintln(stderr, err)
-			return code
-		}
-		return 0
+		return handleSubcmdResult(runGuideModuleDev(ctx, g, subArgs, stdout, stderr), stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unsupported guide command: %s\n", cmd)
 		return 1
@@ -425,10 +432,13 @@ func runGuideStyle(ctx context.Context, g globalFlags, args []string, stdout, _ 
 	var format string
 
 	fs := flag.NewFlagSet("guide style", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -452,11 +462,14 @@ func runGuideModuleDev(ctx context.Context, g globalFlags, args []string, stdout
 	var section, format string
 
 	fs := flag.NewFlagSet("guide module-dev", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&section, "section", "all", "section: all|index|composition|structure|providers|publish|refactoring")
 	fs.StringVar(&format, "format", "text", "output format: text|json|markdown")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
 		return &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
@@ -530,7 +543,7 @@ func parseGlobalFlags(args []string) (globalFlags, []string, error) {
 	return g, fs.Args(), nil
 }
 
-func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr io.Writer) ([]provider.ExportSummary, error) {
+func runProviderExport(ctx context.Context, g globalFlags, args []string, stdout, stderr io.Writer) ([]provider.ExportSummary, error) {
 	var namespace string
 	var name string
 	var version string
@@ -541,7 +554,7 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 	var clean bool
 
 	fs := flag.NewFlagSet("provider export", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs.SetOutput(stdout)
 	fs.StringVar(&namespace, "namespace", "hashicorp", "provider namespace")
 	fs.StringVar(&name, "name", "", "provider name")
 	fs.StringVar(&version, "version", "", "provider version")
@@ -552,6 +565,9 @@ func runProviderExport(ctx context.Context, g globalFlags, args []string, stderr
 	fs.BoolVar(&clean, "clean", false, "remove existing provider/version subtree before export")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil, err
+		}
 		return nil, &provider.ValidationError{Message: err.Error()}
 	}
 	if extra := fs.Args(); len(extra) > 0 {
