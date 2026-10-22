@@ -2,6 +2,8 @@ module github.com/mkusaka/tfdc
 
 go 1.23.0
 
+toolchain go1.27.3
+
 require github.com/hashicorp/hcl/v2 v2.24.0
 
 require (
